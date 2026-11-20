@@ -279,14 +279,17 @@ const Course = (() => {
     }
 
     if (offDist > 0) {
-      const wallScale = C.mountain.id === 'redrock' ? 0.62 : C.mountain.id === 'town' ? 0.54 : C.mountain.id === 'volcano' ? 0.58 : 0.46;
-      const rise = Math.pow(offDist, 1.32) * wallScale;
-      const n1 = fbm2(x * 0.018, z * 0.018, 3, C.seed & 4095);
-      const n2 = vnoise2(x * 0.055, z * 0.055, (C.seed + 77) & 4095);
+      // Open scenic rolling mountain flanks & terraced canyon mesas (never a claustrophobic vertical tunnel!)
+      const gentle = Math.min(offDist, 10) * 0.16;
+      const outer = Math.max(0, offDist - 10);
+      const wallScale = C.mountain.id === 'redrock' ? 0.30 : C.mountain.id === 'town' ? 0.24 : C.mountain.id === 'volcano' ? 0.28 : 0.22;
+      const n1 = fbm2(x * 0.015, z * 0.015, 3, C.seed & 4095);
+      const n2 = vnoise2(x * 0.048, z * 0.048, (C.seed + 77) & 4095);
+      const rawRise = gentle + Math.pow(outer, 1.06) * wallScale + (n1 * 0.5 + 0.5) * Math.min(22, outer * 0.36);
       const terrace = C.mountain.id === 'redrock'
-        ? Math.floor((rise + n1 * 12) / 5.5) * 2.2 + (rise + n1 * 12) * 0.55
-        : rise + n1 * Math.min(26, offDist * 0.45);
-      y += terrace + n2 * Math.min(3.5, offDist * 0.14);
+        ? Math.floor(rawRise / 4.2) * 1.85 + rawRise * 0.56
+        : rawRise;
+      y += terrace + n2 * Math.min(2.8, offDist * 0.11);
     } else if (laneMask > 0.01) {
       y -= lane.drop * laneMask;
     }
@@ -372,19 +375,21 @@ const Course = (() => {
     const kind = C.mountain.propKind;
     const finishClear = !C.mode.endless && Math.abs(s0 + 20 - C.finishS) < 55;
 
-    // 1. Trackside trees / rocks / pillars / houses framing the chute
-    const edgeCount = Math.round((kind === 'forest' ? 14 : kind === 'town' ? 10 : 9) * (0.85 + rng() * 0.3));
+    // 1. Trackside trees / rocks / pillars / houses framing the chute (only on stable shoulders so nothing floats!)
+    const edgeCount = Math.round((kind === 'forest' ? 16 : kind === 'town' ? 12 : 10) * (0.85 + rng() * 0.3));
     for (let i = 0; i < edgeCount; i++) {
       const s = s0 + rng() * BUCKET;
       const sp = C.at(s);
       const side = rng() < 0.5 ? -1 : 1;
-      const distOut = sp.hw + 1.8 + rng() * 24;
+      const distOut = sp.hw + 1.6 + rng() * 14.5;
       const u = side * distOut;
       // Don't block active shortcut lane
       const lane = C.laneAt(s, sp.seg);
       if (lane && Math.abs(u - lane.u) < lane.hw + 2.4) continue;
       const x = sp.cx + u, z = -s, y = C.height(x, z);
-      const scale = 0.75 + rng() * 0.85;
+      const n = C.normal(x, z);
+      if (n[1] < 0.72) continue; // skip steep cliff faces so props always sit solidly grounded!
+      const scale = 0.8 + rng() * 0.85;
       const sub = kind === 'forest' ? (rng() < 0.82 ? 'pine' : 'boulder')
         : kind === 'canyon' ? (rng() < 0.72 ? 'boulder' : 'cactus')
         : kind === 'volcano' ? (rng() < 0.7 ? 'basalt' : 'ember')

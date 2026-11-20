@@ -174,14 +174,14 @@ const Terrain = (() => {
               offCol = mix(M.bankCol.rgb, M.rockCol.rgb, steep * 0.8 + strata * 0.25);
             }
 
-            // Track bed with packed tire ruts & dusty shoulder border
-            let edgeHighlight: f32 = smoothstep(0.15, 0.55, trackM) * (1.0 - smoothstep(0.65, 0.95, trackM));
+            // Track bed with crisp contrast, packed tire ruts & sunlit track borders
+            let edgeHighlight: f32 = smoothstep(0.12, 0.48, trackM) * (1.0 - smoothstep(0.58, 0.92, trackM));
             let ruts: f32 = sin(wp.x * 1.9 + g1 * 2.2) * 0.5 + 0.5;
-            var trkCol: vec3f = M.trackCol.rgb * (0.84 + 0.24 * g2 + 0.12 * ruts);
-            trkCol = mix(trkCol, M.trackCol.rgb * 1.24, edgeHighlight * 0.55);
+            var trkCol: vec3f = M.trackCol.rgb * (0.76 + 0.26 * g2 + 0.14 * ruts);
+            trkCol = mix(trkCol, M.accentCol.rgb * 0.92, edgeHighlight * 0.42);
 
             // Shortcut golden dusty glow hint so players spot risky side lanes
-            trkCol = mix(trkCol, mix(trkCol, M.accentCol.rgb, 0.32), shortM * 0.75);
+            trkCol = mix(trkCol, mix(trkCol, M.accentCol.rgb, 0.42), shortM * 0.85);
 
             // Town cobbles & high-contrast painted stair nosings
             if (biome > 2.5) {

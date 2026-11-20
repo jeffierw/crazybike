@@ -128,11 +128,11 @@ const Camera = (() => {
     return { eye, target: C.target, viewM, projM, vp: m4.mul(projM, viewM) };
   };
 
-  // Garage showroom orbiting camera
+  // Garage showroom orbiting camera (framed cleanly left of the upgrade card column)
   C.garageView = function (angle, aspect) {
-    const rad = 3.55;
-    const eye = [Math.sin(angle) * rad, 1.55, Math.cos(angle) * rad];
-    const tgt = [0, 0.92, 0];
+    const rad = 4.1;
+    const tgt = [0.55, 0.92, 0];
+    const eye = [tgt[0] + Math.sin(angle) * rad, 1.58, Math.cos(angle) * rad];
     const viewM = m4.lookAt(eye, tgt, [0, 1, 0]);
     const projM = m4.perspective(46 * PI / 180, aspect, 0.2, 200);
     return { eye, target: tgt, viewM, projM, vp: m4.mul(projM, viewM) };

@@ -473,13 +473,15 @@ const BikeMesh = (() => {
     const footL = xform(bikeM, footLL);
     const footR = xform(bikeM, footRL);
 
-    // Torso + downhill jersey + backpack
-    Solid.pushLimb(hip, shd, 0.27, colJersey, 0.65);
-    Solid.push('box', m4.mul(bikeM, m4.mul(m4.translate([shdL[0], shdL[1] - 0.16, shdL[2] + 0.18]), m4.scale([0.24, 0.34, 0.14]))), colDark, 0.75);
+    // Torso + downhill jersey + cleanly aligned rear hydration pack + neck
+    Solid.pushLimb(hip, shd, 0.28, colJersey, 0.65);
+    Solid.pushLimb(shd, hed, 0.11, colSkin, 0.65);
+    const packBot = xform(bikeM, [hipL[0] * 0.7 + shdL[0] * 0.3, lerp(hipL[1], shdL[1], 0.32), lerp(hipL[2], shdL[2], 0.32) + 0.18]);
+    const packTop = xform(bikeM, [hipL[0] * 0.2 + shdL[0] * 0.8, lerp(hipL[1], shdL[1], 0.88), lerp(hipL[2], shdL[2], 0.88) + 0.18]);
+    Solid.pushLimb(packBot, packTop, 0.19, colDark, 0.75, 'box');
 
     // Full-face downhill helmet + dark visor goggles
-    Solid.pushTRS('sphere', hed, R.yaw, 0, 0, [0.30, 0.31, 0.35], colHelmet, 0.22);
-    const visorPos = xform(bikeM, [hedL[0], hedL[1] + 0.02, hedL[2] - 0.14]);
+    Solid.pushTRS('sphere', hed, R.yaw, 0, 0, [0.31, 0.32, 0.36], colHelmet, 0.22);
     Solid.push('box', m4.mul(bikeM, m4.mul(m4.translate([hedL[0], hedL[1] + 0.02, hedL[2] - 0.14]), m4.scale([0.25, 0.09, 0.09]))), [0.07, 0.08, 0.12], 0.15);
 
     // Nemesis glowing red fury halo above helmet!
@@ -488,13 +490,17 @@ const BikeMesh = (() => {
       Solid.pushTRS('cone', nmPos, time * 4, PI, 0, [0.22, 0.28, 0.22], [1.0, 0.14, 0.12], -1.0);
     }
 
-    // Arms with bent elbows
+    // Arms with smooth spherical shoulder/elbow joints
     const elbowL = v3.lerp(shdLeft, handL, 0.5); elbowL[1] -= 0.08;
     const elbowR = v3.lerp(shdRight, handR, 0.5); elbowR[1] -= 0.08;
-    Solid.pushLimb(shdLeft, elbowL, 0.105, colJersey, 0.65);
-    Solid.pushLimb(elbowL, handL, 0.085, colSkin, 0.65);
-    Solid.pushLimb(shdRight, elbowR, 0.105, colJersey, 0.65);
-    Solid.pushLimb(elbowR, handR, 0.085, colSkin, 0.65);
+    Solid.pushTRS('sphere', shdLeft, 0, 0, 0, [0.16, 0.16, 0.16], colJersey, 0.65);
+    Solid.pushTRS('sphere', shdRight, 0, 0, 0, [0.16, 0.16, 0.16], colJersey, 0.65);
+    Solid.pushTRS('sphere', elbowL, 0, 0, 0, [0.11, 0.11, 0.11], colJersey, 0.65);
+    Solid.pushTRS('sphere', elbowR, 0, 0, 0, [0.11, 0.11, 0.11], colJersey, 0.65);
+    Solid.pushLimb(shdLeft, elbowL, 0.11, colJersey, 0.65);
+    Solid.pushLimb(elbowL, handL, 0.09, colSkin, 0.65);
+    Solid.pushLimb(shdRight, elbowR, 0.11, colJersey, 0.65);
+    Solid.pushLimb(elbowR, handR, 0.09, colSkin, 0.65);
 
     // Visible swung baseball bat / wrench at combat tier 3+!
     if (R.attackTimer > 0 && R.combatTier >= 3 && R.attackKind !== 'kick') {
@@ -504,13 +510,17 @@ const BikeMesh = (() => {
       Solid.pushLimb(grip, tip, 0.07, [0.86, 0.68, 0.32], 0.45);
     }
 
-    // Legs with bent knees
+    // Legs with smooth hip & knee joints
     const kneeL = v3.lerp(hipLeft, footL, 0.5); kneeL[2] -= 0.14;
     const kneeR = v3.lerp(hipRight, footR, 0.5); kneeR[2] -= 0.14;
-    Solid.pushLimb(hipLeft, kneeL, 0.125, colDark, 0.72);
-    Solid.pushLimb(kneeL, footL, 0.10, colDark, 0.72);
-    Solid.pushLimb(hipRight, kneeR, 0.125, colDark, 0.72);
-    Solid.pushLimb(kneeR, footR, 0.10, colDark, 0.72);
+    Solid.pushTRS('sphere', hipLeft, 0, 0, 0, [0.16, 0.16, 0.16], colDark, 0.72);
+    Solid.pushTRS('sphere', hipRight, 0, 0, 0, [0.16, 0.16, 0.16], colDark, 0.72);
+    Solid.pushTRS('sphere', kneeL, 0, 0, 0, [0.13, 0.13, 0.13], colDark, 0.72);
+    Solid.pushTRS('sphere', kneeR, 0, 0, 0, [0.13, 0.13, 0.13], colDark, 0.72);
+    Solid.pushLimb(hipLeft, kneeL, 0.13, colDark, 0.72);
+    Solid.pushLimb(kneeL, footL, 0.105, colDark, 0.72);
+    Solid.pushLimb(hipRight, kneeR, 0.13, colDark, 0.72);
+    Solid.pushLimb(kneeR, footR, 0.105, colDark, 0.72);
   }
 
   return { emitRider };
