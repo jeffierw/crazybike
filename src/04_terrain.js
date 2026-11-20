@@ -49,7 +49,7 @@ const Terrain = (() => {
     for (let c = 0; c < NU; c++) {
       const u = U_OFF[c];
       const x = sp.cx + u;
-      const y = Course.height(x, z);
+      const y = Course.height(x, z, sp, lane, ramps);
 
       // Compute material masks
       const au = Math.abs(u);
