@@ -1,26 +1,89 @@
-// ---------------------------------------------------------------- 99_main: Step 6 8-rider combat racing loop (player + 7 AI + combat + stunts + audio)
+// ---------------------------------------------------------------- 99_main: Complete CrazyBike application loop, 3D garage showroom, career/endless flow & window.__bike test hook
 const App = (() => {
   let gfx = null, canvas = null, time = 0, raceTime = 0;
-  let mountainIdx = 0;
+  let state = 'title'; // 'title' | 'career' | 'endless' | 'garage' | 'race' | 'pause' | 'result'
+  let activeEvent = null;
+  let activeEndless = null;
   let player = null, rivals = [], allRiders = [];
+  let flyS = 40, garageAngle = 0.65;
+  let trackRec = [], trackAcc = 0, koPoints = [];
 
   let bannerText = '', bannerCol = '#ffc43d', bannerT = 0;
   function showBanner(text, col = '#ffc43d') {
-    bannerText = text; bannerCol = col; bannerT = 1.75;
+    bannerText = text; bannerCol = col; bannerT = 1.8;
   }
 
-  function startRide(mIdx = mountainIdx, modeId = 'freeride', diff = mIdx) {
-    mountainIdx = mIdx;
-    Course.init(MOUNTAINS[mountainIdx].id, modeId, 202611);
+  function createPlayerFromCareer(startS = 12) {
+    const c = Career.data;
+    const paint = Career.paint;
+    const R = Physics.createRider({
+      id: 0,
+      name: 'YOU',
+      isPlayer: true,
+      s: startS,
+      u: 0,
+      initSpeed: 10,
+      upgrades: Object.assign({}, c.upgrades),
+      frameCol: paint.frame,
+      jerseyCol: paint.jersey,
+      helmetCol: paint.helmet,
+    });
+    if (c.cheats && c.cheats.megaBat) {
+      R.combatTier = 3;
+      R.bottles = 3;
+    }
+    return R;
+  }
+
+  function startRun(mountainId, modeId, seed, diff, eventObj = null) {
+    activeEvent = eventObj;
+    activeEndless = modeId === 'endless' ? { mountainId, seed, diff } : null;
+    Course.init(mountainId, modeId, seed);
     Terrain.reset();
     Camera.reset();
     Particles.clear();
     Combat.reset();
     raceTime = 0;
-    player = Physics.createRider({ id: 0, name: 'YOU', isPlayer: true, s: 12, u: 0, initSpeed: 10 });
+    trackRec = [];
+    trackAcc = 0;
+    koPoints = [];
+    bannerT = 0;
+
+    player = createPlayerFromCareer(12);
     rivals = AI.spawnPack(diff);
     allRiders = [player, ...rivals];
-    renderHUD(true);
+    state = 'race';
+    UI.setScreen('race');
+    showBanner(eventObj ? `${Course.mountain.name} · ${Course.mode.name}` : `无尽暴走 · ${Course.mountain.name}`, '#ffc43d');
+  }
+
+  function finalizeRun() {
+    if (state === 'result') return;
+    state = 'result';
+    Music.setPlaying(false);
+    const summary = {
+      endless: Course.mode.endless,
+      mountain: Course.mountain,
+      modeName: Course.mode.name,
+      seed: Course.seed,
+      rank: player.rank,
+      time: player.finishTime || raceTime,
+      dist: Math.max(player.s, 10),
+      takedowns: player.takedowns,
+      trickScore: player.totalTrickScore,
+      crashes: player.crashes,
+      maxSpeedKmh: player.maxSpeed * 3.6,
+      bestAirDist: player.bestAirDist,
+      finished: player.finished,
+      track: trackRec.slice(),
+      koPoints: koPoints.slice(),
+    };
+    const payout = Course.mode.endless
+      ? Career.recordEndlessRun(summary)
+      : Career.recordCareerFinish(activeEvent || Career.EVENTS[0], summary);
+    summary.payout = payout;
+    summary.totalCash = payout.total;
+    UI.setScreen('result', summary);
   }
 
   function updateRanks() {
@@ -33,15 +96,16 @@ const App = (() => {
     for (let i = 0; i < sorted.length; i++) sorted[i].rank = i + 1;
   }
 
-  function applyGlobals(cam, aspect, t) {
+  function applyGlobals(cam, focusPos, t) {
     const m = Course.mountain;
     const sDir = v3.norm(m.sunDir);
     const ivp = m4.invert(cam.vp);
 
-    const sc = [player.pos[0], player.pos[1], player.pos[2] - 14];
-    const lEye = v3.mad(sc, sDir, 85);
+    const sc = focusPos || [0, 0, 0];
+    const lEye = v3.mad(sc, sDir, 75);
     const lView = m4.lookAt(lEye, sc, [0, 1, 0]);
-    const lProj = m4.ortho(-38, 38, -38, 38, 5, 195);
+    const ext = state === 'garage' ? 8 : 38;
+    const lProj = m4.ortho(-ext, ext, -ext, ext, 4, 185);
     const lVP = m4.mul(lProj, lView);
 
     setGlobalMat('viewProj', cam.vp);
@@ -50,14 +114,20 @@ const App = (() => {
     setGlobalVec('camPos', cam.eye[0], cam.eye[1], cam.eye[2], t);
     setGlobalVec('sunDir', sDir[0], sDir[1], sDir[2], m.sunInt);
     setGlobalVec('sunCol', m.sunCol[0], m.sunCol[1], m.sunCol[2], m.exposure);
-    setGlobalVec('skyZen', m.skyZen[0], m.skyZen[1], m.skyZen[2], m.fogDens);
+    setGlobalVec('skyZen', m.skyZen[0], m.skyZen[1], m.skyZen[2], state === 'garage' ? 0.0005 : m.fogDens);
     setGlobalVec('skyHor', m.skyHor[0], m.skyHor[1], m.skyHor[2], 0.02);
     setGlobalVec('groundCol', m.groundCol[0], m.groundCol[1], m.groundCol[2], m.idx);
-    setGlobalVec('feel', Feel.speedNorm, player.adrenaline / 100, Feel.hitFlash, Feel.boostGlow);
+    setGlobalVec(
+      'feel',
+      state === 'race' ? Feel.speedNorm : 0,
+      player ? player.adrenaline / 100 : 0,
+      state === 'race' ? Feel.hitFlash : 0,
+      state === 'race' ? Feel.boostGlow : 0
+    );
     gfx.setGlobals(GBUF);
   }
 
-  function stepSim(dt) {
+  function stepRace(dt) {
     if (Feel.hitstop > 0) {
       Feel.hitstop = Math.max(0, Feel.hitstop - dt);
       return;
@@ -65,14 +135,22 @@ const App = (() => {
     const simDt = Feel.slowMo > 0 ? dt * 0.45 : dt;
     raceTime += simDt;
 
-    // 1. Player input & combat
     const inp = Input.sample(raceTime);
+    if (inp.pause) {
+      state = 'pause';
+      Music.setPlaying(false);
+      UI.setScreen('pause');
+      return;
+    }
     if (inp.cam) Camera.cycle();
     if (inp.atkL) Combat.tryAttack(player, -1, allRiders, raceTime);
     else if (inp.atkR) Combat.tryAttack(player, 1, allRiders, raceTime);
+
+    // Optional PS2 Low-Gravity Cheat lift while airborne!
+    if (Career.data.cheats.lowGrav && player.air) player.vel[1] += 8.2 * simDt;
+
     Physics.stepRider(player, inp, simDt, raceTime);
 
-    // 2. 7 AI rivals (same physics engine!)
     for (let i = 0; i < rivals.length; i++) {
       const R = rivals[i];
       const aiInp = AI.decideInput(R, player, allRiders, simDt, raceTime);
@@ -81,12 +159,17 @@ const App = (() => {
       Physics.stepRider(R, aiInp, simDt, raceTime);
     }
     AI.recycleEndless(rivals, player);
-
-    // 3. Projectiles & rider-to-rider collisions
     Combat.step(allRiders, simDt, raceTime);
     updateRanks();
 
-    // 4. Drain physics, stunts & combat events
+    // Telemetry sampling for highlight route card
+    trackAcc += simDt;
+    if (trackAcc >= 0.22) {
+      trackAcc = 0;
+      trackRec.push([player.s, player.pos[1], player.speed, player.air ? 1 : 0]);
+      if (trackRec.length > 900) trackRec.shift();
+    }
+
     for (const ev of Physics.drainEvents()) {
       if (ev.type === 'jump' && ev.rider.isPlayer) Sound.playJump(ev.power);
       else if (ev.type === 'land') {
@@ -100,21 +183,26 @@ const App = (() => {
         if (ev.rider.isPlayer) { Feel.jolt(0.55, 0.7, 0.05); Feel.slowMo = 0.65; Sound.playCrash(); }
       } else if (ev.type === 'scrape' && ev.rider.isPlayer) {
         Particles.burstImpact(ev.pos, [1.4, 0.85, 0.3], 10);
-        Feel.jolt(0.28, 0.25, 0);
-        Sound.playHit(false);
+        Feel.jolt(0.26, 0.22, 0); Sound.playHit(false);
       } else if (ev.type === 'nearmiss' && ev.rider.isPlayer) {
         if (Feel.nearMiss(ev.side)) { player.adrenaline = Math.min(100, player.adrenaline + 6); Sound.playWhoosh(); }
+      } else if (ev.type === 'finish' && ev.rider.isPlayer) {
+        Sound.playTakedown();
+        finalizeRun();
+        return;
       }
     }
+
     for (const se of Stunts.drainEvents()) {
       if (se.type === 'trick_land') showBanner(`${se.name} ×${se.combo}  +${se.pts}`, '#ffc43d');
       else if (se.type === 'trick_bail') showBanner(`贪招翻车！痛失 ${se.lost} 分`, '#ff3155');
     }
     for (const ce of Combat.drainEvents()) {
       if (ce.type === 'takedown' && ce.attacker.isPlayer) {
+        koPoints.push(player.s);
         showBanner(ce.wasNemesis ? `宿敌反杀 ${ce.victim.name}! +$${ce.bounty}` : `击倒 ${ce.victim.name}! +$${ce.bounty}`, '#ff5b1f');
       } else if (ce.type === 'hit' && ce.attacker.isPlayer) {
-        showBanner(`命中 ${ce.victim.name}!`, '#38e2ff');
+        showBanner(`重击 ${ce.victim.name}!`, '#38e2ff');
       }
     }
 
@@ -126,59 +214,7 @@ const App = (() => {
   }
 
   let hudTimer = 0;
-  function renderHUD(force = false) {
-    const ui = document.getElementById('ui');
-    if (!ui) return;
-    if (force) {
-      ui.innerHTML = `
-        <div style="position:absolute;top:14px;left:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <div class="hud-chip" style="font-weight:900;color:#ff5b1f;">CRAZYBIKE · ${Course.mountain.name}</div>
-          ${MOUNTAINS.map((mt, i) => `<button class="btn ${i === mountainIdx ? 'primary' : ''}" data-m="${i}">${mt.name}</button>`).join('')}
-        </div>
-        <div id="hud-rank" class="hud-chip" style="position:absolute;top:14px;right:16px;text-align:right;">
-          <div id="hud-pos" style="font-size:32px;font-weight:900;line-height:1;">1<span style="font-size:14px;color:var(--muted);">/8</span></div>
-          <div id="hud-ko" style="font-size:12px;color:#ffc43d;margin-top:4px;">K.O. 0 · 水壶 1</div>
-        </div>
-        <div id="hud-banner" style="position:absolute;top:22%;left:50%;transform:translateX(-50%);font-size:28px;font-weight:900;text-shadow:0 4px 18px rgba(0,0,0,.75);letter-spacing:.05em;pointer-events:none;white-space:nowrap;"></div>
-        <div id="hud-stat" class="hud-chip" style="position:absolute;bottom:16px;right:16px;text-align:right;min-width:175px;">
-          <div id="hud-spd" style="font-size:34px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;">0 <span style="font-size:13px;color:var(--muted);">KM/H</span></div>
-          <div id="hud-dist" style="font-size:12px;color:var(--muted);margin-top:4px;">0 m</div>
-          <div style="height:6px;background:rgba(255,255,255,.15);border-radius:3px;margin-top:8px;overflow:hidden;">
-            <div id="hud-adr" style="height:100%;width:25%;background:linear-gradient(90deg,#ffc43d,#ff5b1f);"></div>
-          </div>
-        </div>
-        <div class="hud-chip" style="position:absolute;bottom:16px;left:16px;font-size:12px;color:var(--muted);">
-          A/D 转向 · W 踩踏 · S 甩尾 · Space 跳 · Shift 暴走 · Q/E 或 J/K 左右暴打/砸水壶 · 空中方向键做特技
-        </div>`;
-      ui.querySelectorAll('button[data-m]').forEach(btn => {
-        btn.onclick = () => startRide(+btn.dataset.m);
-      });
-    }
-    const posEl = document.getElementById('hud-pos');
-    const koEl = document.getElementById('hud-ko');
-    const spdEl = document.getElementById('hud-spd');
-    const distEl = document.getElementById('hud-dist');
-    const adrEl = document.getElementById('hud-adr');
-    const banEl = document.getElementById('hud-banner');
-    if (posEl) posEl.innerHTML = `${player.rank}<span style="font-size:14px;color:var(--muted);">/${allRiders.length}</span>`;
-    if (koEl) koEl.textContent = `K.O. ${player.takedowns} · ${Combat.TIER_NAMES[player.combatTier]} · 水壶 ${player.bottles}`;
-    if (spdEl) spdEl.innerHTML = `${Math.round(player.speed * 3.6)} <span style="font-size:13px;color:var(--muted);">KM/H</span>`;
-    if (distEl) distEl.textContent = `${Math.round(player.s)} / ${Course.finishS} m · 特技 ${player.totalTrickScore}`;
-    if (adrEl) adrEl.style.width = `${Math.round(player.adrenaline)}%`;
-    if (banEl) {
-      if (player.air && player.trickType && player.trickScore > 20) {
-        banEl.style.color = '#38e2ff';
-        banEl.textContent = `${Stunts.TRICKS[player.trickType].name} ×${player.trickCombo}  ${Math.round(player.trickScore)}`;
-      } else if (bannerT > 0) {
-        banEl.style.color = bannerCol;
-        banEl.textContent = bannerText;
-      } else {
-        banEl.textContent = '';
-      }
-    }
-  }
-
-  function frame(dt) {
+  function renderFrame(dt) {
     const dpr = Math.min(devicePixelRatio || 1, 2);
     const w = Math.max(2, Math.floor(canvas.clientWidth * dpr));
     const h = Math.max(2, Math.floor(canvas.clientHeight * dpr));
@@ -186,75 +222,182 @@ const App = (() => {
       canvas.width = w; canvas.height = h; gfx.resize();
     }
     Post.ensureSize(w, h);
+    const aspect = w / h;
 
     time += dt;
     if (bannerT > 0) bannerT = Math.max(0, bannerT - dt);
-    stepSim(dt);
-    Terrain.update(player.s);
-    const cam = Camera.update(player, dt, w / h, Feel);
-    applyGlobals(cam, w / h, time);
+
+    if (state === 'race') {
+      stepRace(dt);
+    } else if (state === 'pause') {
+      const inp = Input.sample(raceTime);
+      if (inp.pause) { state = 'race'; Music.setPlaying(true); UI.setScreen('race'); }
+      Sound.update(player, dt, false);
+    } else if (state === 'garage') {
+      garageAngle += dt * 0.55;
+      if (player) Sound.update(player, dt, false);
+    } else {
+      // Live scenic mountain flythrough behind Title / Career / Endless / Result screens!
+      flyS += dt * 22;
+      if (flyS > 1550) flyS = 40;
+      if (player) Sound.update(player, dt, false);
+    }
 
     Solid.clear();
-    Props.emit(player.s, time);
-    for (let i = 0; i < allRiders.length; i++) {
-      if (Math.abs(allRiders[i].s - player.s) < 260) BikeMesh.emitRider(allRiders[i], time);
+    let cam, focusPos, drawWorld = true;
+
+    if (state === 'garage') {
+      drawWorld = false;
+      cam = Camera.garageView(garageAngle, aspect);
+      focusPos = [0, 0.9, 0];
+      // Pedestal floor & glowing showroom ring
+      Solid.pushTRS('cyl', [0, -0.14, 0], 0, 0, 0, [3.6, 0.28, 3.6], [0.16, 0.18, 0.23], 0.45);
+      Solid.pushTRS('cyl', [0, 0.01, 0], 0, 0, 0, [3.75, 0.04, 3.75], [1.0, 0.40, 0.12], -1.0);
+      const showBike = createPlayerFromCareer(0);
+      showBike.pos = [0, 0, 0]; showBike.yaw = 0; showBike.pitch = 0; showBike.roll = 0;
+      showBike.wheelSpin = -time * 1.4;
+      showBike.susp = Math.sin(time * 2.4) * 0.04 + 0.04;
+      BikeMesh.emitRider(showBike, time);
+    } else if (state === 'race' || state === 'pause') {
+      Terrain.update(player.s);
+      cam = Camera.update(player, dt, aspect, Feel);
+      focusPos = [player.pos[0], player.pos[1], player.pos[2] - 14];
+      Props.emit(player.s, time);
+      for (let i = 0; i < allRiders.length; i++) {
+        if (Math.abs(allRiders[i].s - player.s) < 250) BikeMesh.emitRider(allRiders[i], time);
+      }
+      Combat.emitProjectiles();
+    } else {
+      Terrain.update(flyS);
+      const sp = Course.at(flyS), spA = Course.at(flyS + 32);
+      const eye = [sp.cx + Math.sin(time * 0.25) * 4, Course.height(sp.cx, -flyS) + 5.8, -flyS];
+      const tgt = [spA.cx, Course.height(spA.cx, -(flyS + 32)) + 1.8, -(flyS + 32)];
+      const viewM = m4.lookAt(eye, tgt, [0, 1, 0]);
+      const projM = m4.perspective(66 * PI / 180, aspect, 0.35, 900);
+      cam = { eye, target: tgt, viewM, projM, vp: m4.mul(projM, viewM) };
+      focusPos = tgt;
+      Props.emit(flyS, time);
     }
-    Combat.emitProjectiles();
+
     Solid.upload();
+    applyGlobals(cam, focusPos, time);
 
     gfx.beginFrame();
     gfx.beginPass(Post.shadowTarget, { depth: 1.0 });
     Solid.drawShadow();
     gfx.endPass();
 
-    gfx.beginPass(Post.sceneTarget, { color: [0.1, 0.1, 0.12, 1], depth: 1.0 });
+    gfx.beginPass(Post.sceneTarget, { color: [0.08, 0.09, 0.12, 1], depth: 1.0 });
     Sky.draw();
-    Terrain.draw(Post.shadowTex);
+    if (drawWorld) Terrain.draw(Post.shadowTex);
     Solid.drawColor(Post.shadowTex);
-    Particles.draw(cam.viewM);
+    if (state === 'race' || state === 'pause') Particles.draw(cam.viewM);
     gfx.endPass();
 
     Post.present();
     gfx.endFrame();
 
     hudTimer += dt;
-    if (hudTimer > 0.06) { hudTimer = 0; renderHUD(false); }
+    if (state === 'race' && hudTimer > 0.05) {
+      hudTimer = 0;
+      UI.updateHUD(player, allRiders.length, bannerText, bannerCol, bannerT);
+    }
   }
 
   async function boot() {
     canvas = document.getElementById('gl');
     Input.init(canvas);
+    Course.init(MOUNTAINS[0].id, 'freeride', 202611);
     gfx = await createGfx(canvas);
     Post.init(gfx);
     Sky.init(gfx);
     Terrain.init(gfx);
     Solid.init(gfx);
     Particles.init(gfx);
-    addEventListener('pointerdown', () => { Sound.unlock(); Music.setPlaying(true); }, { once: true });
-    addEventListener('keydown', () => { Sound.unlock(); Music.setPlaying(true); }, { once: true });
     if (gfx.finishPipelineAsync) await new Promise(r => setTimeout(r, 80));
-    startRide(0);
+
+    UI.init({
+      onScreen(next) {
+        state = next;
+        if (next !== 'race') Music.setPlaying(false);
+      },
+      previewMountain(mId) {
+        Course.init(mId, 'freeride', 202611);
+        Terrain.reset();
+        flyS = 40;
+      },
+      startEvent(ev) {
+        startRun(ev.mountainId, ev.modeId, ev.seed, ev.diff, ev);
+      },
+      startEndless(mId, seed, diff) {
+        startRun(mId, 'endless', seed, diff, null);
+      },
+      togglePause() {
+        if (state === 'race') { state = 'pause'; Music.setPlaying(false); UI.setScreen('pause'); }
+        else if (state === 'pause') { state = 'race'; Music.setPlaying(true); UI.setScreen('race'); }
+      },
+      restartRun() {
+        Music.setPlaying(true);
+        if (activeEndless) startRun(activeEndless.mountainId, 'endless', activeEndless.seed, activeEndless.diff, null);
+        else if (activeEvent) startRun(activeEvent.mountainId, activeEvent.modeId, activeEvent.seed, activeEvent.diff, activeEvent);
+        else startRun(MOUNTAINS[0].id, 'freeride', 202611, 0, Career.EVENTS[0]);
+      },
+      finishEndlessNow() {
+        if (state === 'race' && Course.mode.endless) finalizeRun();
+      },
+    });
+
+    // Support direct share links: #today or #seed-123456
+    const hash = (location.hash || '').slice(1);
+    if (hash === 'today') {
+      const sd = todaySeed();
+      startRun(MOUNTAINS[sd % MOUNTAINS.length].id, 'endless', sd, 1.5, null);
+    } else if (/^seed-(\d+)$/.test(hash)) {
+      const sd = +RegExp.$1;
+      startRun(MOUNTAINS[sd % MOUNTAINS.length].id, 'endless', sd, 1.2, null);
+    } else {
+      UI.setScreen('title');
+    }
 
     let last = performance.now();
     function loop(now) {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      frame(dt);
+      renderFrame(dt);
       requestAnimationFrame(loop);
     }
     requestAnimationFrame(loop);
 
+    // Cold-Smoke-inspired automation & inspection hook
     window.__bike = {
       version: BUILD_HASH,
       ready: true,
       backend: gfx.caps.backend,
-      state: () => ({
-        s: player.s, u: player.u, speed: player.speed, rank: player.rank,
-        takedowns: player.takedowns, trickScore: player.totalTrickScore,
-        rivals: rivals.map(r => ({ name: r.name, s: Math.round(r.s), rank: r.rank, nemesis: r.nemesis, crashed: r.crashed })),
-        minCamClear: Camera.minClearance,
-      }),
-      setMountain: id => { const i = MOUNTAINS.findIndex(m => m.id === id); if (i >= 0) startRide(i); },
+      screen: () => state,
+      setScreen: s => UI.setScreen(s),
+      startEvent: idx => { const ev = Career.EVENTS[idx] || Career.EVENTS[0]; startRun(ev.mountainId, ev.modeId, ev.seed, ev.diff, ev); },
+      startEndless: (mId = 'redrock', seed = 202611) => startRun(mId, 'endless', seed, 1.2, null),
+      finishNow: () => finalizeRun(),
+      career: () => Career.data,
+      state: () => player ? ({
+        s: +player.s.toFixed(1), u: +player.u.toFixed(1), speedKmh: +(player.speed * 3.6).toFixed(1),
+        rank: player.rank, takedowns: player.takedowns, trickScore: player.totalTrickScore,
+        crashed: player.crashed, air: player.air, adrenaline: +player.adrenaline.toFixed(0),
+        minCamClear: +Camera.minClearance.toFixed(2),
+        rivals: rivals.map(r => ({ name: r.name, s: Math.round(r.s), rank: r.rank, nemesis: r.nemesis })),
+      }) : null,
+      sim(secs, fn, opts = {}) {
+        Input.setScript(fn || (() => AI.decideInput(player, rivals[0], allRiders, 1 / 60, raceTime)));
+        const n = Math.round(secs * 60);
+        for (let i = 0; i < n; i++) {
+          if (state !== 'race') break;
+          stepRace(1 / 60);
+          if (opts.draw) renderFrame(0);
+          else Camera.update(player, 1 / 60, 16 / 9, Feel);
+        }
+        Input.setScript(null);
+      },
+      renderOnce: () => renderFrame(1 / 60),
     };
   }
 
@@ -263,4 +406,8 @@ const App = (() => {
     const ui = document.getElementById('ui');
     if (ui) ui.innerHTML = `<pre style="color:#ff5566;padding:20px;">Boot error: ${e.stack || e.message}</pre>`;
   });
+
+  return {
+    backendName: () => (gfx && gfx.caps ? gfx.caps.name : 'WebGL2'),
+  };
 })();
