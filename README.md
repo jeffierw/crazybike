@@ -1,5 +1,7 @@
 # CRAZYBIKE · 暴走速降
 
+**▶ Play Online / 在线试玩：https://crazybike.yepw.dev**
+
 A pure-code, zero-asset 3D arcade downhill mountain biking & combat racing game in a single HTML file — inspired by PS2 **Downhill Domination** (*暴走山地自行车*) and the code-only WebGPU/WebGL2 architecture of **Cold Smoke** (`huiskylabs/cold-smoke`).
 
 - **Zero external assets**: Terrain, mountains, bikes, articulated riders, dust plumes, impacts, ratchet SFX and adaptive rock/electro beats are all generated in code at runtime.
