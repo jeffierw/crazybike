@@ -67,11 +67,20 @@ const App = (() => {
         if (Feel.nearMiss(ev.side)) { player.adrenaline = Math.min(100, player.adrenaline + 6); Sound.playWhoosh(); }
       }
     }
+    for (const se of Stunts.drainEvents()) {
+      if (se.type === 'trick_land') showBanner(`${se.name} ×${se.combo}  +${se.pts}`, '#ffc43d');
+      else if (se.type === 'trick_bail') showBanner(`贪招翻车！痛失 ${se.lost} 分`, '#ff3155');
+    }
     Particles.emitTire(player, simDt);
     Particles.step(simDt);
     Sound.update(player, dt, true);
     Music.step(dt, Feel.speedNorm, player.adrenaline / 100, Course.mountain.idx);
     Feel.step(player, dt);
+  }
+
+  let bannerText = '', bannerCol = '#ffc43d', bannerT = 0;
+  function showBanner(text, col = '#ffc43d') {
+    bannerText = text; bannerCol = col; bannerT = 1.65;
   }
 
   let hudTimer = 0;
@@ -91,8 +100,9 @@ const App = (() => {
             <div id="hud-adr" style="height:100%;width:25%;background:linear-gradient(90deg,#ffc43d,#ff5b1f);"></div>
           </div>
         </div>
+        <div id="hud-banner" style="position:absolute;top:22%;left:50%;transform:translateX(-50%);font-size:28px;font-weight:900;text-shadow:0 4px 18px rgba(0,0,0,.75);letter-spacing:.05em;pointer-events:none;"></div>
         <div class="hud-chip" style="position:absolute;bottom:16px;left:16px;font-size:12px;color:var(--muted);">
-          A/D 转向 · W 踩踏 · S 甩尾刹车 · Space 蓄力跳 · Shift 暴走加速 · V 切机位
+          地面: A/D 转向 · W 踩踏 · S 甩尾 · Space 跳 · Shift 暴走 | 空中: W 超人 · S 后空翻 · A 摆尾 · D 360（落地前松手!）
         </div>`;
       ui.querySelectorAll('button[data-m]').forEach(btn => {
         btn.onclick = () => startRide(+btn.dataset.m);
@@ -101,9 +111,21 @@ const App = (() => {
     const spdEl = document.getElementById('hud-spd');
     const distEl = document.getElementById('hud-dist');
     const adrEl = document.getElementById('hud-adr');
+    const banEl = document.getElementById('hud-banner');
     if (spdEl) spdEl.innerHTML = `${Math.round(player.speed * 3.6)} <span style="font-size:13px;color:var(--muted);">KM/H</span>`;
-    if (distEl) distEl.textContent = `${Math.round(player.s)} / ${Course.finishS} m${player.air ? ' · AIR!' : ''}${player.crashed ? ' · WIPEOUT!' : ''}`;
+    if (distEl) distEl.textContent = `${Math.round(player.s)} / ${Course.finishS} m · 特技 ${player.totalTrickScore}${player.air ? ' · AIR!' : ''}`;
     if (adrEl) adrEl.style.width = `${Math.round(player.adrenaline)}%`;
+    if (banEl) {
+      if (player.air && player.trickType && player.trickScore > 20) {
+        banEl.style.color = '#38e2ff';
+        banEl.textContent = `${Stunts.TRICKS[player.trickType].name} ×${player.trickCombo}  ${Math.round(player.trickScore)}`;
+      } else if (bannerT > 0) {
+        banEl.style.color = bannerCol;
+        banEl.textContent = bannerText;
+      } else {
+        banEl.textContent = '';
+      }
+    }
   }
 
   function frame(dt) {
@@ -116,6 +138,7 @@ const App = (() => {
     Post.ensureSize(w, h);
 
     time += dt;
+    if (bannerT > 0) bannerT = Math.max(0, bannerT - dt);
     stepSim(dt);
     Terrain.update(player.s);
     const cam = Camera.update(player, dt, w / h, Feel);
