@@ -1,0 +1,15 @@
+{
+  "name": "crazybike",
+  "version": "0.1.0",
+  "description": "CrazyBike — A pure-code 3D arcade downhill mountain biking & combat racing game inspired by PS2 Downhill Domination and Cold Smoke.",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "build": "node build.js",
+    "start": "node build.js && node tools/serve.js",
+    "verify": "node tools/verify-mvp.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
