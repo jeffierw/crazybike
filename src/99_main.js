@@ -52,13 +52,25 @@ const App = (() => {
 
     const evs = Physics.drainEvents();
     for (const ev of evs) {
-      if (ev.type === 'land' && ev.rider.isPlayer) Feel.land(ev.impact);
-      else if (ev.type === 'crash' && ev.rider.isPlayer) { Feel.jolt(0.55, 0.7, 0.05); Feel.slowMo = 0.65; }
-      else if (ev.type === 'scrape' && ev.rider.isPlayer) Feel.jolt(0.28, 0.25, 0);
-      else if (ev.type === 'nearmiss' && ev.rider.isPlayer) {
-        if (Feel.nearMiss(ev.side)) player.adrenaline = Math.min(100, player.adrenaline + 6);
+      if (ev.type === 'jump' && ev.rider.isPlayer) Sound.playJump(ev.power);
+      else if (ev.type === 'land') {
+        Particles.burstLand(ev.rider.pos, clamp(ev.impact / 10, 0.5, 1.6));
+        if (ev.rider.isPlayer) { Feel.land(ev.impact); Sound.playLand(ev.impact); }
+      } else if (ev.type === 'crash') {
+        Particles.burstImpact(ev.pos, [1.5, 0.45, 0.15], 24);
+        if (ev.rider.isPlayer) { Feel.jolt(0.55, 0.7, 0.05); Feel.slowMo = 0.65; Sound.playCrash(); }
+      } else if (ev.type === 'scrape' && ev.rider.isPlayer) {
+        Particles.burstImpact(ev.pos, [1.4, 0.85, 0.3], 10);
+        Feel.jolt(0.28, 0.25, 0);
+        Sound.playHit(false);
+      } else if (ev.type === 'nearmiss' && ev.rider.isPlayer) {
+        if (Feel.nearMiss(ev.side)) { player.adrenaline = Math.min(100, player.adrenaline + 6); Sound.playWhoosh(); }
       }
     }
+    Particles.emitTire(player, simDt);
+    Particles.step(simDt);
+    Sound.update(player, dt, true);
+    Music.step(dt, Feel.speedNorm, player.adrenaline / 100, Course.mountain.idx);
     Feel.step(player, dt);
   }
 
@@ -110,6 +122,7 @@ const App = (() => {
     applyGlobals(cam, w / h, time);
 
     Solid.clear();
+    Props.emit(player.s, time);
     BikeMesh.emitRider(player, time);
     Solid.upload();
 
@@ -122,6 +135,7 @@ const App = (() => {
     Sky.draw();
     Terrain.draw(Post.shadowTex);
     Solid.drawColor(Post.shadowTex);
+    Particles.draw(cam.viewM);
     gfx.endPass();
 
     Post.present();
@@ -139,6 +153,9 @@ const App = (() => {
     Sky.init(gfx);
     Terrain.init(gfx);
     Solid.init(gfx);
+    Particles.init(gfx);
+    addEventListener('pointerdown', () => { Sound.unlock(); Music.setPlaying(true); }, { once: true });
+    addEventListener('keydown', () => { Sound.unlock(); Music.setPlaying(true); }, { once: true });
     if (gfx.finishPipelineAsync) await new Promise(r => setTimeout(r, 80));
     startRide(0);
 
