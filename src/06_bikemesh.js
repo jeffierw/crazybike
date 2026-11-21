@@ -633,72 +633,82 @@ fn skinVertex(pos: vec3f, nrm: vec3f, bw: vec4f, baseRow: i32) -> SkinV {
           var clothSheen: f32 = 0.0;
           var mirrorBoost: f32 = 0.0;
 
+          let fold: f32 = fbm3(v.bp.xy * 18.0 + vec2f(v.bp.z * 14.0, 0.0));
+          // Gritty trail dust/dirt creeping up shoes, shin guards & lower shorts hem
+          let dustMask: f32 = smoothstep(1.02, 0.36, v.bp.y) * (0.45 + 0.55 * vnoise(v.bp.xz * 26.0 + v.bp.y * 14.0));
+          let trailDust: vec3f = U.groundCol.rgb * 1.35 + vec3f(0.14, 0.11, 0.08);
+
           if (id < 0.5) {
-            // 0: Downhill Racing Jersey with diagonal stripe, shoulder accents & subtle back race plate
+            // 0: Pro Downhill Jersey with shoulder armor panels, chest graphic & woven fabric creases
             let stripe: f32 = smoothstep(0.035, 0.055, abs(v.bp.x) - 0.145) * smoothstep(1.24, 1.38, v.bp.y);
-            let chestBand: f32 = 1.0 - smoothstep(0.025, 0.055, abs(v.bp.y - 1.46 + abs(v.bp.x) * 0.25));
+            let chestBand: f32 = 1.0 - smoothstep(0.022, 0.048, abs(v.bp.y - 1.46 + abs(v.bp.x) * 0.25));
             let sleeveCuff: f32 = smoothstep(0.28, 0.36, abs(v.bp.x));
-            alb = mix(M.uJersey.rgb, vec3f(0.11, 0.12, 0.15), sleeveCuff * 0.72);
-            alb = mix(alb, vec3f(0.95, 0.96, 0.97), chestBand * 0.85);
-            alb = mix(alb, M.uAccent.rgb, stripe * 0.55);
-            // Subtle woven fabric micro-variation
-            let weave: f32 = vnoise(v.bp.xy * 55.0 + v.bp.z * 32.0);
-            alb = alb * (0.94 + 0.10 * weave);
-            rough = 0.74;
-            clothSheen = 0.24;
+            alb = mix(M.uJersey.rgb, vec3f(0.09, 0.10, 0.12), sleeveCuff * 0.78);
+            alb = mix(alb, vec3f(0.90, 0.89, 0.86), chestBand * 0.82);
+            alb = mix(alb, M.uAccent.rgb, stripe * 0.68);
+            let weave: f32 = vnoise(v.bp.xy * 68.0 + v.bp.z * 38.0);
+            alb = alb * (0.86 + 0.16 * fold + 0.08 * weave);
+            alb = mix(alb, trailDust, dustMask * 0.22);
+            rough = 0.78;
+            clothSheen = 0.18;
           } else if (id < 1.5) {
-            // 1: Baggy MTB Freeride Shorts (pro dark slate + crisp outer seam stripe!)
+            // 1: Heavy Cordura Baggy MTB Shorts (matte charcoal + subtle team trim + trail dust)
             let outerStripe: f32 = (1.0 - smoothstep(0.012, 0.024, abs(v.bp.z - 0.14))) * smoothstep(0.17, 0.22, abs(v.bp.x));
-            alb = mix(vec3f(0.11, 0.12, 0.15), M.uAccent.rgb * 0.85, outerStripe * 0.72);
-            let weave: f32 = vnoise(v.bp.yz * 48.0 + v.bp.x * 24.0);
-            alb = alb * (0.93 + 0.12 * weave);
-            rough = 0.82;
-            clothSheen = 0.14;
+            alb = mix(vec3f(0.10, 0.11, 0.13), M.uAccent.rgb * 0.82, outerStripe * 0.65);
+            let weave: f32 = vnoise(v.bp.yz * 56.0 + v.bp.x * 28.0);
+            alb = alb * (0.86 + 0.16 * fold + 0.08 * weave);
+            alb = mix(alb, trailDust, dustMask * 0.34);
+            rough = 0.86;
+            clothSheen = 0.10;
           } else if (id < 2.5) {
-            // 2: Hard-Shell Knee, Shin & Elbow Armor Guards
+            // 2: Scuffed Hard-Shell Knee, Shin & Elbow Armor Guards
             let strap: f32 = 1.0 - smoothstep(0.015, 0.032, abs(fract(v.bp.y * 5.2) - 0.5));
-            alb = mix(vec3f(0.17, 0.18, 0.21), M.uHelmet.rgb * 0.7, strap * 0.45);
-            rough = 0.34;
+            alb = mix(vec3f(0.14, 0.15, 0.17), M.uAccent.rgb * 0.65, strap * 0.45);
+            alb = mix(alb, trailDust, dustMask * 0.46);
+            rough = 0.40;
           } else if (id < 3.5) {
             // 3: Armored Motocross Gloves
             let knuckle: f32 = smoothstep(1.13, 1.17, v.bp.y);
-            alb = mix(vec3f(0.08, 0.08, 0.10), M.uJersey.rgb * 0.85, knuckle * 0.6);
-            rough = 0.52;
+            alb = mix(vec3f(0.08, 0.08, 0.10), M.uAccent.rgb * 0.82, knuckle * 0.55);
+            rough = 0.58;
           } else if (id < 4.5) {
-            // 4: Chunky Flat-Pedal MTB Shoes with contrast sole
+            // 4: Dusty Flat-Pedal MTB Trail Shoes with rubber sole
             let sole: f32 = 1.0 - smoothstep(0.39, 0.415, v.bp.y);
-            alb = mix(vec3f(0.12, 0.13, 0.15), vec3f(0.88, 0.86, 0.80), sole);
-            rough = 0.66;
+            alb = mix(vec3f(0.11, 0.11, 0.13), vec3f(0.76, 0.72, 0.64), sole);
+            alb = mix(alb, trailDust, 0.36 * (0.5 + 0.5 * fold));
+            rough = 0.74;
           } else if (id < 5.5) {
-            // 5: Glossy Full-Face Motocross Helmet + Center Racing Stripe + Razor-Smooth Per-Pixel Goggle Strap + Chin Vent
+            // 5: Pro Carbon/Fiberglass Full-Face DH Helmet + Racing Stripe + Crisp Goggle Strap + Chin Vent
             let centerStripe: f32 = 1.0 - smoothstep(0.020, 0.032, abs(v.bp.x));
             let gogStrap: f32 = (1.0 - smoothstep(0.018, 0.026, abs(hY - 0.012))) * smoothstep(-0.095, -0.055, hZ);
             let chinVent: f32 = smoothstep(-0.085, -0.118, hZ) * (1.0 - smoothstep(-0.03, 0.01, hY));
             let underPeak: f32 = smoothstep(0.075, 0.105, hY) * smoothstep(-0.11, -0.15, hZ);
-            alb = mix(M.uHelmet.rgb, vec3f(0.97, 0.97, 0.98), centerStripe * 0.85);
-            alb = mix(alb, vec3f(0.06, 0.06, 0.08), max(gogStrap * 0.95, max(chinVent * 0.88, underPeak * 0.45)));
-            rough = mix(0.18, 0.78, gogStrap);
-            mirrorBoost = 0.25 * (1.0 - gogStrap);
+            let carbon: f32 = 0.94 + 0.08 * vnoise(v.bp.xz * 85.0);
+            alb = mix(M.uHelmet.rgb, M.uAccent.rgb * 0.95, centerStripe * 0.78) * carbon;
+            alb = mix(alb, vec3f(0.05, 0.05, 0.07), max(gogStrap * 0.96, max(chinVent * 0.90, underPeak * 0.50)));
+            rough = mix(0.22, 0.80, gogStrap);
+            mirrorBoost = 0.24 * (1.0 - gogStrap);
           } else if (id < 6.5) {
-            // 6: Mirrored Motocross Goggles (iridescent lens in front, matte black strap around back)
+            // 6: Mirrored Motocross Goggles
             let isLens: f32 = smoothstep(-0.075, -0.098, hZ);
-            let lensTint: vec3f = mix(vec3f(0.08, 0.24, 0.36), M.uAccent.rgb * 1.15, fres);
+            let lensTint: vec3f = mix(vec3f(0.09, 0.22, 0.30), M.uAccent.rgb * 0.95 + vec3f(0.18), fres);
             alb = mix(vec3f(0.05, 0.05, 0.07), lensTint, isLens);
-            rough = mix(0.70, 0.06, isLens);
-            mirrorBoost = isLens * 0.85;
+            rough = mix(0.72, 0.07, isLens);
+            mirrorBoost = isLens * 0.82;
           } else if (id < 7.5) {
-            // 7: Streamlined Hydration Pack with reflective racing stripe
+            // 7: Tactical Hydration Pack with rugged strap detail
             let strip: f32 = 1.0 - smoothstep(0.014, 0.026, abs(v.bp.x));
-            alb = mix(vec3f(0.14, 0.15, 0.19), M.uAccent.rgb, strip * 0.75);
-            rough = 0.62;
+            alb = mix(vec3f(0.12, 0.13, 0.15), M.uAccent.rgb * 0.85, strip * 0.65);
+            alb = alb * (0.90 + 0.14 * fold);
+            rough = 0.70;
           } else {
             // 8: Neck / gaiter
-            alb = vec3f(0.68, 0.50, 0.39);
-            rough = 0.72;
+            alb = vec3f(0.58, 0.42, 0.33);
+            rough = 0.76;
           }
 
           let sh: f32 = sampleShadow(v.wp, n);
-          var c: vec3f = litSurface(alb * mix(0.42, 1.0, ao), n, v.wp, rough, sh);
+          var c: vec3f = litSurface(alb * mix(0.38, 1.0, ao), n, v.wp, rough, sh);
 
           // Woven jersey fabric sheen at grazing angles
           if (clothSheen > 0.0) {
@@ -707,13 +717,13 @@ fn skinVertex(pos: vec3f, nrm: vec3f, bw: vec4f, baseRow: i32) -> SkinV {
           // Glossy helmet / mirrored goggle sky reflection
           if (mirrorBoost > 0.0) {
             let rdir: vec3f = reflect(-viewD, n);
-            let skyRef: vec3f = mix(U.skyHor.rgb, U.skyZen.rgb * 1.2, saturate(rdir.y * 0.5 + 0.5));
-            let sunGlint: f32 = pow(max(dot(rdir, U.sunDir.xyz), 0.0), 28.0) * 1.4;
-            c = c + (skyRef * (0.35 + 0.65 * fres) + U.sunCol.rgb * sunGlint) * mirrorBoost;
+            let skyRef: vec3f = mix(U.skyHor.rgb, U.skyZen.rgb * 1.15, saturate(rdir.y * 0.5 + 0.5));
+            let sunGlint: f32 = pow(max(dot(rdir, U.sunDir.xyz), 0.0), 32.0) * 1.3;
+            c = c + (skyRef * (0.32 + 0.65 * fres) + U.sunCol.rgb * sunGlint) * mirrorBoost;
           }
-          // Adrenaline overdrive energetic rim glow
+          // Subtle warm sunlit overdrive rim (grounded, not neon)
           if (M.uMeta.y > 0.01) {
-            c = c + vec3f(1.2, 0.52, 0.12) * fres * M.uMeta.y * 0.85;
+            c = c + U.sunCol.rgb * fres * M.uMeta.y * 0.36;
           }
 
           var o: FOut;
@@ -978,8 +988,8 @@ const Solid = (() => {
         box: makeBox(),
         cyl: makeCyl(12, 0.5, 0.5),
         cone: makeCyl(9, 0.02, 0.52),
-        tire: makeTorus(22, 8, 0.355, 0.086),
-        rim: makeRim(20, 6, 0.295, 0.022),
+        tire: makeTorus(24, 9, 0.365, 0.060),
+        rim: makeRim(24, 6, 0.312, 0.017),
         sphere: makeOctaSphere(6, 10),
       };
       for (const k in defs) {
@@ -1135,11 +1145,15 @@ const BikeMesh = (() => {
     const colDark   = [0.14, 0.15, 0.18];
     const colRubber = [0.11, 0.11, 0.12];
 
-    const tireScale = 0.98 + upg.tires * 0.065;
-    const tubeScale = 1.0 + upg.frame * 0.10;
+    const tireScale = 0.98 + upg.tires * 0.055;
+    const tubeScale = 1.0 + upg.frame * 0.08;
     const comp = clamp(R.susp || 0, -0.07, 0.26);
     const steerAng = clamp((R.steer || 0) * 0.44, -0.52, 0.52);
-    const wheelR = 0.42 * tireScale;
+    const wheelR = 0.425 * tireScale;
+    const pedA = R.pedalPhase || 0;
+    const idleW = R.idleMode ? 1 : 0;
+    const sprintAmp = (!R.air && !idleW && !R.crashed) ? sat((R.speed || 0) / 16) * (R.boosting ? 1.25 : 0.92) : 0;
+    const bikePedalRock = Math.cos(pedA) * 0.052 * sprintAmp; // Pro DH standing sprint side-to-side frame pump!
 
     // 1. Bike world transform (riding or detached tumbling bike during crash)
     let bikeM;
@@ -1152,7 +1166,7 @@ const BikeMesh = (() => {
       bikeM = m4.translate(R.pos);
       bikeM = m4.mul(bikeM, m4.rotY(R.yaw + (R.trickYaw || 0)));
       bikeM = m4.mul(bikeM, m4.rotX(R.pitch + (R.trickPitch || 0)));
-      bikeM = m4.mul(bikeM, m4.rotZ(R.roll + (R.trickRoll || 0)));
+      bikeM = m4.mul(bikeM, m4.rotZ(R.roll + (R.trickRoll || 0) + bikePedalRock));
     }
 
     // Tailwhip swings rear frame around headtube!
@@ -1182,26 +1196,34 @@ const BikeMesh = (() => {
     const rocker   = xform(frameM, rockerL);
     const shFront  = xform(frameM, shockFront);
 
-    // ---- Detailed Wheels: knobby DH tire + alloy rim + stainless brake rotor + hub + 6-bar spokes ----
+    // ---- Detailed Realistic MTB Wheels: slim knobby tire + alloy rim + 203mm rotor + hydraulic caliper + cassette + 8 thin spokes ----
     const wheelSpin = R.wheelSpin || 0;
-    const emitWheel = (Mbase, localPos, steerY) => {
+    const emitWheel = (Mbase, localPos, steerY, isRear) => {
       let wm = m4.mul(Mbase, m4.translate(localPos));
       if (steerY) wm = m4.mul(wm, m4.rotY(steerY));
       const sm = m4.mul(wm, m4.rotX(wheelSpin));
-      Solid.push('tire', m4.mul(sm, m4.scale([tireScale, tireScale, tireScale])), colTire, 0.86);
-      Solid.push('rim',  m4.mul(sm, m4.scale([tireScale, tireScale, tireScale])), colRim, 0.32);
-      // Hub barrel
-      Solid.push('cyl', m4.mul(sm, m4.mul(m4.rotZ(PI * 0.5), m4.scale([0.11, 0.16, 0.11]))), colDark, 0.30);
-      // Left-side stainless hydraulic brake disc rotor!
-      Solid.push('cyl', m4.mul(sm, m4.mul(m4.translate([-0.068, 0, 0]), m4.mul(m4.rotZ(PI * 0.5), m4.scale([0.23, 0.012, 0.23])))), colMetal, 0.20);
-      // 3 crossed thin spoke bars (6 visual spokes)
-      for (let k = 0; k < 3; k++) {
-        const rm = m4.mul(sm, m4.rotX(k * PI / 3));
-        Solid.push('box', m4.mul(rm, m4.scale([0.014, wheelR * 1.44, 0.016])), colMetal, 0.32);
+      Solid.push('tire', m4.mul(sm, m4.scale([tireScale, tireScale, tireScale])), colTire, 0.88);
+      Solid.push('rim',  m4.mul(sm, m4.scale([tireScale, tireScale, tireScale])), colRim, 0.30);
+      // CNC anodized hub barrel
+      Solid.push('cyl', m4.mul(sm, m4.mul(m4.rotZ(PI * 0.5), m4.scale([0.088, 0.145, 0.088]))), colDark, 0.28);
+      // Left-side 203mm stainless hydraulic disc rotor!
+      Solid.push('cyl', m4.mul(sm, m4.mul(m4.translate([-0.062, 0, 0]), m4.mul(m4.rotZ(PI * 0.5), m4.scale([0.23, 0.010, 0.23])))), colMetal, 0.20);
+      // Mounted non-spinning hydraulic disc brake caliper gripping the rotor!
+      const calZ = isRear ? -0.095 : 0.095;
+      Solid.push('box', m4.mul(wm, m4.mul(m4.translate([-0.068, 0.075, calZ]), m4.scale([0.044, 0.065, 0.082]))), colDark, 0.32);
+      // Rear 10-speed DH cassette gear stack on right side of rear hub!
+      if (isRear) {
+        Solid.push('cyl', m4.mul(sm, m4.mul(m4.translate([0.058, 0, 0]), m4.mul(m4.rotZ(PI * 0.5), m4.scale([0.16, 0.032, 0.16])))), colMetal, 0.26);
+        Solid.push('cyl', m4.mul(sm, m4.mul(m4.translate([0.068, 0, 0]), m4.mul(m4.rotZ(PI * 0.5), m4.scale([0.11, 0.022, 0.11])))), colDark, 0.30);
+      }
+      // 4 crossed thin steel spoke bars (8 crisp visual spokes)
+      for (let k = 0; k < 4; k++) {
+        const rm = m4.mul(sm, m4.rotX(k * PI / 4));
+        Solid.push('box', m4.mul(rm, m4.scale([0.008, wheelR * 1.48, 0.009])), colMetal, 0.28);
       }
     };
-    emitWheel(frameM, rearAxleL, 0);
-    emitWheel(bikeM, frontAxleL, steerAng);
+    emitWheel(frameM, rearAxleL, 0, true);
+    emitWheel(bikeM, frontAxleL, steerAng, false);
 
     // ---- Hydroformed Downhill Frame ----
     // Thick rectangular hydroformed downtube + gusset brace
@@ -1238,19 +1260,26 @@ const BikeMesh = (() => {
     Solid.pushLimb(shFront, rocker, 0.038, colDark, 0.28);
     Solid.pushLimb(v3.lerp(shFront, rocker, 0.20), v3.lerp(shFront, rocker, 0.82), 0.064, colShockSpring, 0.26);
 
-    // ---- Drivetrain: Chainring, Bashguard, Cranks & Pedals ----
-    const pedA = R.pedalPhase || 0;
-    const crankR = 0.16;
+    // ---- Drivetrain: Chainring, Tensioned Upper/Lower Chain, Rear Derailleur, Cranks & Pedals ----
+    const crankR = 0.175;
     const crkL = xform(frameM, [-0.14, bbL[1] + Math.sin(pedA) * crankR, bbL[2] + Math.cos(pedA) * crankR]);
     const crkR = xform(frameM, [ 0.14, bbL[1] - Math.sin(pedA) * crankR, bbL[2] - Math.cos(pedA) * crankR]);
     // Front chainring / gold bashguard (Lv2+)
     const ringCol = upg.drive >= 2 ? [0.95, 0.72, 0.16] : colMetal;
-    Solid.push('cyl', m4.mul(frameM, m4.mul(m4.translate([0.072, bbL[1], bbL[2]]), m4.mul(m4.rotZ(PI * 0.5), m4.scale([0.22, 0.018, 0.22])))), ringCol, 0.24);
-    // Crank arms & flat pedals
-    Solid.pushLimb(xform(frameM, [-0.08, bbL[1], bbL[2]]), crkL, 0.028, colDark, 0.32, 'box', 0.042);
-    Solid.pushLimb(xform(frameM, [ 0.08, bbL[1], bbL[2]]), crkR, 0.028, colDark, 0.32, 'box', 0.042);
-    Solid.push('box', m4.mul(frameM, m4.mul(m4.translate([-0.18, bbL[1] + Math.sin(pedA) * crankR, bbL[2] + Math.cos(pedA) * crankR]), m4.scale([0.11, 0.025, 0.11]))), colMetal, 0.38);
-    Solid.push('box', m4.mul(frameM, m4.mul(m4.translate([ 0.18, bbL[1] - Math.sin(pedA) * crankR, bbL[2] - Math.cos(pedA) * crankR]), m4.scale([0.11, 0.025, 0.11]))), colMetal, 0.38);
+    Solid.push('cyl', m4.mul(frameM, m4.mul(m4.translate([0.072, bbL[1], bbL[2]]), m4.mul(m4.rotZ(PI * 0.5), m4.scale([0.22, 0.016, 0.22])))), ringCol, 0.24);
+    // Tensioned upper & lower drive chain + hanging rear derailleur cage!
+    const chTopF = xform(frameM, [0.068, bbL[1] + 0.095, bbL[2]]);
+    const chBotF = xform(frameM, [0.068, bbL[1] - 0.095, bbL[2]]);
+    const chTopR = xform(frameM, [0.066, wheelR + 0.075, 0.67]);
+    const derPul = xform(frameM, [0.070, wheelR - 0.115, 0.65]);
+    Solid.pushLimb(chTopF, chTopR, 0.012, colMetal, 0.30, 'box', 0.014);
+    Solid.pushLimb(chBotF, derPul, 0.012, colMetal, 0.30, 'box', 0.014);
+    Solid.pushLimb(xform(frameM, [0.074, wheelR, 0.67]), derPul, 0.022, colDark, 0.32, 'box', 0.032);
+    // Crank arms & flat MTB pedals
+    Solid.pushLimb(xform(frameM, [-0.08, bbL[1], bbL[2]]), crkL, 0.026, colDark, 0.30, 'box', 0.040);
+    Solid.pushLimb(xform(frameM, [ 0.08, bbL[1], bbL[2]]), crkR, 0.026, colDark, 0.30, 'box', 0.040);
+    Solid.push('box', m4.mul(frameM, m4.mul(m4.translate([-0.18, bbL[1] + Math.sin(pedA) * crankR, bbL[2] + Math.cos(pedA) * crankR]), m4.scale([0.11, 0.022, 0.105]))), colMetal, 0.36);
+    Solid.push('box', m4.mul(frameM, m4.mul(m4.translate([ 0.18, bbL[1] - Math.sin(pedA) * crankR, bbL[2] - Math.cos(pedA) * crankR]), m4.scale([0.11, 0.022, 0.105]))), colMetal, 0.36);
 
     // ---- Burly Dual-Crown Front DH Fork (Steers with handlebars!) ----
     let steerM = m4.mul(bikeM, m4.translate([0, 0.92 - comp * 0.88, -0.40]));
@@ -1263,19 +1292,23 @@ const BikeMesh = (() => {
     const fMidR  = xform(steerM, [ 0.115, 0.72 - comp * 0.35, -0.55]);
     const fAxL   = xform(steerM, [-0.115, wheelR, -0.71]);
     const fAxR   = xform(steerM, [ 0.115, wheelR, -0.71]);
-    const fThick = 0.046 + upg.fork * 0.006;
+    const fThick = 0.044 + upg.fork * 0.005;
 
-    // Upper gleaming stanchions + Lower black casting legs
-    Solid.pushLimb(fTopL, fMidL, fThick * 0.86, colForkStanchion, 0.18);
-    Solid.pushLimb(fTopR, fMidR, fThick * 0.86, colForkStanchion, 0.18);
-    Solid.pushLimb(fMidL, fAxL,  fThick * 1.18, colDark, 0.30);
-    Solid.pushLimb(fMidR, fAxR,  fThick * 1.18, colDark, 0.30);
-    // Upper & lower dual-crown triple clamps + fork arch fender
-    Solid.pushLimb(fTopL, fTopR, 0.044, colMetal, 0.25, 'box', 0.075);
-    Solid.pushLimb(xform(steerM, [-0.115, 0.84 - comp * 0.88, -0.45]), xform(steerM, [0.115, 0.84 - comp * 0.88, -0.45]), 0.042, colDark, 0.32, 'box', 0.068);
-    Solid.pushLimb(fMidL, fMidR, 0.036, colFrame, 0.32, 'box', 0.055);
+    // Upper gleaming stanchions + rubber wiper seals + Lower black casting legs
+    Solid.pushLimb(fTopL, fMidL, fThick * 0.84, colForkStanchion, 0.18);
+    Solid.pushLimb(fTopR, fMidR, fThick * 0.84, colForkStanchion, 0.18);
+    Solid.pushLimb(v3.lerp(fTopL, fMidL, 0.92), fMidL, fThick * 1.24, colRubber, 0.72);
+    Solid.pushLimb(v3.lerp(fTopR, fMidR, 0.92), fMidR, fThick * 1.24, colRubber, 0.72);
+    Solid.pushLimb(fMidL, fAxL,  fThick * 1.15, colDark, 0.30);
+    Solid.pushLimb(fMidR, fAxR,  fThick * 1.15, colDark, 0.30);
+    // Upper & lower dual-crown triple clamps + fork arch + classic DH front race number plate!
+    Solid.pushLimb(fTopL, fTopR, 0.042, colMetal, 0.24, 'box', 0.072);
+    Solid.pushLimb(xform(steerM, [-0.115, 0.84 - comp * 0.88, -0.45]), xform(steerM, [0.115, 0.84 - comp * 0.88, -0.45]), 0.040, colDark, 0.32, 'box', 0.066);
+    Solid.pushLimb(fMidL, fMidR, 0.034, colFrame, 0.32, 'box', 0.052);
+    Solid.push('box', m4.mul(steerM, m4.mul(m4.translate([0, 0.97 - comp * 0.88, -0.46]), m4.mul(m4.rotX(-0.32), m4.scale([0.19, 0.21, 0.016])))), [0.92, 0.91, 0.88], 0.42);
+    Solid.push('box', m4.mul(steerM, m4.mul(m4.translate([0, 0.97 - comp * 0.88, -0.471]), m4.mul(m4.rotX(-0.32), m4.scale([0.15, 0.04, 0.008])))), colAccent, 0.45);
     // Front mini DH mudguard under lower crown
-    Solid.push('box', m4.mul(steerM, m4.mul(m4.translate([0, 0.86 - comp * 0.52, -0.60]), m4.mul(m4.rotX(-0.28), m4.scale([0.13, 0.018, 0.26])))), colDark, 0.55);
+    Solid.push('box', m4.mul(steerM, m4.mul(m4.translate([0, 0.84 - comp * 0.52, -0.60]), m4.mul(m4.rotX(-0.28), m4.scale([0.13, 0.016, 0.26])))), colDark, 0.55);
 
     // ---- Cockpit: Stem, Wide Riser Handlebars, Lock-on Grips & Brake Levers ----
     const stemBase = xform(steerM, [0, 1.08 - comp * 0.88, -0.36]);
@@ -1296,13 +1329,7 @@ const BikeMesh = (() => {
     if (upg.combat >= 1) {
       const btA = xform(frameM, [0, 0.56 - comp * 0.78, -0.10]);
       const btB = xform(frameM, [0, 0.74 - comp * 0.82, -0.25]);
-      Solid.pushLimb(btA, btB, 0.072, [0.16, 0.84, 1.0], 0.22);
-    }
-
-    // Adrenaline overdrive glowing rear streak
-    if (!R.crashed && R.boosting) {
-      const glowPos = xform(frameM, [0, 0.50, 0.88]);
-      Solid.pushTRS('sphere', glowPos, 0, 0, 0, [0.18, 0.18, 0.52], [1.0, 0.45, 0.08], -1.0);
+      Solid.pushLimb(btA, btB, 0.066, [0.16, 0.58, 0.76], 0.28);
     }
 
     // ---- 2. SDF-Skinned Rider Pose & Queue ----
@@ -1333,12 +1360,15 @@ const BikeMesh = (() => {
       return;
     }
 
-    // Compute athletic riding / idle / trick / combat pose in bike-local coords
-    const crouch = (R.charge || 0) * 0.24 + comp * 0.60 + (R.boosting ? 0.14 : 0);
+    // Compute athletic standing sprint / idle / trick / combat pose in bike-local coords
+    const crouch = (R.charge || 0) * 0.24 + comp * 0.60 + (R.boosting ? 0.15 : 0);
     const leanX  = clamp(-(R.steer || 0) * 0.22, -0.26, 0.26);
-    const pedalY = Math.sin(pedA) * 0.14;
-    const pedalZ = Math.cos(pedA) * 0.14;
-    const idleW  = R.idleMode ? 1 : 0;
+    const pedalY = Math.sin(pedA) * crankR;
+    const pedalZ = Math.cos(pedA) * crankR;
+    // Energetic standing sprint cadence pump (hip & shoulders driving every downstroke like Downhill Domination!)
+    const pumpY  = Math.sin(pedA * 2) * 0.036 * sprintAmp;
+    const pumpX  = -Math.cos(pedA) * 0.052 * sprintAmp;
+    const pumpCh = Math.sin(pedA * 2 + 0.55) * 0.042 * sprintAmp;
 
     // Gentle living breathing & glances when poised at the start gate!
     const breath = idleW ? Math.sin(time * 1.8 + R.id) * 0.015 : 0;
@@ -1350,13 +1380,13 @@ const BikeMesh = (() => {
     let handR = [ barDx, 1.14 - comp * 0.88, -0.36 - barDz];
     let footL = [-0.18, 0.41 - comp * 0.68 + pedalY * (1 - idleW), 0.10 + pedalZ * (1 - idleW)];
     let footR = [ 0.18, 0.41 - comp * 0.68 - pedalY * (1 - idleW), 0.10 - pedalZ * (1 - idleW)];
-    let pel   = [leanX * 0.65, 1.18 - crouch + idleW * 0.04, 0.23 + crouch * 0.14];
-    let chs   = [leanX * 0.95, 1.45 - crouch * 1.12 + breath + idleW * 0.06, 0.06 - (R.boosting ? 0.10 : 0) + idleW * 0.06];
-    let nck   = [leanX * 1.05, 1.67 - crouch * 1.15 + breath + idleW * 0.08, -0.05 - (R.boosting ? 0.12 : 0) + idleW * 0.07];
-    let hed   = [leanX * 1.08, 1.80 - crouch * 1.15 + breath + idleW * 0.08, -0.10 - (R.boosting ? 0.14 : 0) + idleW * 0.07];
-    let torsoYaw = clamp(-(R.steer || 0) * 0.22, -0.28, 0.28);
-    let torsoRoll = leanX * 0.35;
-    let headPitch = 0.08 + crouch * 0.18 - idleW * 0.10;
+    let pel   = [leanX * 0.65 + pumpX, 1.19 - crouch + pumpY + idleW * 0.04, 0.22 + crouch * 0.14 - sprintAmp * 0.04];
+    let chs   = [leanX * 0.95 + pumpX * 0.65, 1.44 - crouch * 1.12 + pumpCh + breath + idleW * 0.06, 0.04 - (R.boosting ? 0.10 : 0) - sprintAmp * 0.05 + idleW * 0.06];
+    let nck   = [leanX * 1.05 + pumpX * 0.45, 1.66 - crouch * 1.15 + pumpCh * 0.85 + breath + idleW * 0.08, -0.07 - (R.boosting ? 0.12 : 0) - sprintAmp * 0.05 + idleW * 0.07];
+    let hed   = [leanX * 1.08 + pumpX * 0.30, 1.79 - crouch * 1.15 + pumpCh * 0.70 + breath + idleW * 0.08, -0.12 - (R.boosting ? 0.14 : 0) - sprintAmp * 0.05 + idleW * 0.07];
+    let torsoYaw = clamp(-(R.steer || 0) * 0.22, -0.28, 0.28) + Math.cos(pedA) * 0.085 * sprintAmp;
+    let torsoRoll = leanX * 0.35 - Math.cos(pedA) * 0.075 * sprintAmp;
+    let headPitch = 0.10 + crouch * 0.18 - idleW * 0.10;
     let elbowPoleL = [-0.85, -0.18, 0.55], elbowPoleR = [0.85, -0.18, 0.55];
     let kneePoleL = [-0.25, 0.15, -1.0], kneePoleR = [0.25, 0.15, -1.0];
 

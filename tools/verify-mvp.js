@@ -137,22 +137,40 @@ vm.runInContext(`
   assert(camOk && fpvCutOk && headNdcY < 0.05 && pCam && !pCam.vp.some(x => !Number.isFinite(x)),
     'All 8 cameras valid, chase headNdcY=' + headNdcY.toFixed(3) + ' (<0.05 non-blocking), FPV lensCut=ON, Photo Mode OK');
 
-  // 4. Forgiving stunt auto-landing + auto-variety trick chain + 3D glowing ribbon trails
+  // 4. V3 Single committed random trick per jump (zero mid-air switching) + ink-brush ribbons + zero post-landing bounce
   Particles.clear();
   const RS = Physics.createRider({ isPlayer: true, s: 60, u: 0, initSpeed: 28 });
-  RS.air = true; RS.vel[1] = 14.5; RS.pos[1] += 1.0;
-  const flowSet = new Set();
-  for (let i = 0; i < 200; i++) {
-    Physics.stepRider(RS, { jump: true, pedal: true }, 1 / 60, i / 60);
-    if (RS.trickType) flowSet.add(RS.trickType);
+  RS.air = true; RS.vel[1] = 13.5; RS.pos[1] += 1.0;
+  const jump1Tricks = new Set();
+  let maxRibVerts = 0, landedAt = -1, reboundAfterLand = 0;
+  for (let i = 0; i < 240; i++) {
+    // Try pressing different trick keys mid-air to prove trick NEVER switches once committed!
+    const inp = i < 90
+      ? { jump: true, trickLeft: i > 35 && i < 55, trickRight: i >= 55, pedal: true }
+      : { pedal: true };
+    Physics.stepRider(RS, inp, 1 / 60, i / 60);
+    if (RS.trickType) jump1Tricks.add(RS.trickType);
     Particles.emitTire(RS, 1 / 60); Particles.step(1 / 60);
-    if (!RS.air && i > 10) break;
+    maxRibVerts = Math.max(maxRibVerts, Particles.ribbonCount());
+    if (landedAt < 0 && !RS.air && i > 10) landedAt = i;
+    else if (landedAt >= 0 && i < landedAt + 25 && RS.air) reboundAfterLand++;
   }
+  // Launch a second jump from s=60 (keeping _trickBag/_lastTrick) to prove random non-repeating variety across jumps!
+  const RS2 = Physics.createRider({ isPlayer: true, s: 60, u: 0, initSpeed: 28 });
+  RS2._trickBag = RS._trickBag; RS2._lastTrick = RS._lastTrick;
+  RS2.air = true; RS2.vel[1] = 12.5; RS2.pos[1] += 1.0;
+  const jump2Tricks = new Set();
+  for (let i = 0; i < 160; i++) {
+    Physics.stepRider(RS2, { jump: true, pedal: true }, 1 / 60, (240 + i) / 60);
+    if (RS2.trickType) jump2Tricks.add(RS2.trickType);
+    if (!RS2.air && i > 10) break;
+  }
+  const t1 = [...jump1Tricks][0], t2 = [...jump2Tricks][0];
   const Rbf = Physics.createRider({ isPlayer: true, s: 60, u: 0, initSpeed: 24 });
-  Rbf.trickType = 'backflip'; Rbf.trickPitch = 3.0; Rbf.trickScore = 400;
+  Rbf.trickType = 'backflip'; Rbf.trickDone = false; Rbf.trickPitch = 3.0; Rbf.trickScore = 400;
   const bfBail = Stunts.onLand(Rbf, 12, 18);
-  assert(!RS.crashed && flowSet.size >= 2 && Particles.ribbonCount() > 24 && bfBail,
-    'Stunts auto-variety (' + [...flowSet].join(' -> ') + '), forgiving landing=OK, ribbonVerts=' + Particles.ribbonCount() + ', backflip upside-down bail=OK');
+  assert(!RS.crashed && !RS2.crashed && jump1Tricks.size === 1 && jump2Tricks.size === 1 && t1 !== t2 && reboundAfterLand === 0 && maxRibVerts > 24 && bfBail,
+    'V3 Stunts single-commit (' + [...jump1Tricks].join(',') + ' -> ' + [...jump2Tricks].join(',') + '), crashed=' + (RS.crashed || RS2.crashed) + ', rebound=' + reboundAfterLand + ', inkRibbons=' + maxRibVerts + ', bfBail=' + bfBail);
 
   // 5. Endless recycler, Career progression & I18N ZH/EN switch
   Course.init('town', 'endless', todaySeed());
