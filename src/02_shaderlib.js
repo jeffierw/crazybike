@@ -89,7 +89,7 @@ fn sampleShadow(worldPos: vec3f, nrm: vec3f) -> f32 {
     return 1.0;
   }
   let refz: f32 = ndc.z - 0.0018;
-  let texel: vec2f = vec2f(1.0 / 1024.0, 1.0 / 1024.0);
+  let texel: vec2f = vec2f(1.0, 1.0) / texSize(uShadow);
   var s: f32 = 0.0;
   s = s + texShadow(uShadow, uv + vec2f(-texel.x, -texel.y), refz);
   s = s + texShadow(uShadow, uv + vec2f( texel.x, -texel.y), refz);

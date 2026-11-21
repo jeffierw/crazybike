@@ -83,6 +83,8 @@ const App = (() => {
     }
     Terrain.reset();
     Terrain.update(12);
+    Wildlife.reset();
+    Wildlife.step(12, 1 / 60, quality);
   }
 
   function startRun(mountainId, modeId, seed, diff, eventObj = null, seamlessFromTitle = false) {
@@ -99,6 +101,8 @@ const App = (() => {
     }
     Particles.clear();
     Combat.reset();
+    Wildlife.reset();
+    Wildlife.step(12, 1 / 60, quality);
     raceTime = 0;
     trackRec = [];
     trackAcc = 0;
@@ -284,8 +288,10 @@ const App = (() => {
       }
     }
 
-    for (let i = 0; i < allRiders.length; i++) Particles.emitTire(allRiders[i], simDt);
+    for (let i = 0; i < allRiders.length; i++) Particles.emitTire(allRiders[i], simDt, quality);
+    Particles.emitAmbient(player.pos, simDt, quality);
     Particles.step(simDt);
+    Wildlife.step(player.s, simDt, quality);
     Sound.update(player, dt, 'race');
     Music.step(dt, Feel.speedNorm, player.adrenaline / 100, Course.mountain.idx);
     Feel.step(player, dt);
@@ -352,7 +358,8 @@ const App = (() => {
       Terrain.update(player.s);
       cam = Photo.step(dt, aspect);
       focusPos = [player.pos[0], player.pos[1], player.pos[2] - 12];
-      Props.emit(player.s, time);
+      Props.emit(player.s, time, quality);
+      Wildlife.emit();
       for (let i = 0; i < allRiders.length; i++) {
         if (Math.abs(allRiders[i].s - player.s) < 250) BikeMesh.emitRider(allRiders[i], time);
       }
@@ -361,15 +368,15 @@ const App = (() => {
       Terrain.update(player.s);
       cam = Camera.update(player, dt, aspect, Feel, state === 'pause');
       focusPos = [player.pos[0], player.pos[1], player.pos[2] - 14];
-      Props.emit(player.s, time);
+      Props.emit(player.s, time, quality);
+      Wildlife.emit();
       for (let i = 0; i < allRiders.length; i++) {
         if (Math.abs(allRiders[i].s - player.s) < 250) BikeMesh.emitRider(allRiders[i], time);
       }
       Combat.emitProjectiles();
     } else {
-      // Poised Start-Gate Title Scene: Player & 7 rivals lined up overlooking the sheer canyon cliff & start arch!
+      // Poised Start-Gate Title Scene: Player & rivals lined up overlooking the canyon drop, soaring wildlife & sunlit motes!
       if (!titleRider) buildTitleScene();
-      // Keep Title rider paint/upgrades synced live with Career!
       const pnt = Career.paint;
       titleRider.frameCol = pnt.frame;
       titleRider.jerseyCol = pnt.jersey;
@@ -379,7 +386,11 @@ const App = (() => {
       Terrain.update(12);
       cam = Camera.titleView(titleRider, dt, aspect, time);
       focusPos = [titleRider.pos[0], titleRider.pos[1], titleRider.pos[2] - 14];
-      Props.emit(12, time);
+      Wildlife.step(12, dt, quality);
+      Particles.emitAmbient(focusPos, dt, quality);
+      Particles.step(dt);
+      Props.emit(12, time, quality);
+      Wildlife.emit();
       BikeMesh.emitRider(titleRider, time);
       for (let i = 0; i < titleRivals.length; i++) BikeMesh.emitRider(titleRivals[i], time);
     }
@@ -396,7 +407,7 @@ const App = (() => {
     Sky.draw();
     if (drawWorld) Terrain.draw(Post.shadowTex);
     Solid.drawColor(Post.shadowTex);
-    if (state === 'race' || state === 'pause' || state === 'photo') Particles.draw(cam.viewM);
+    if (drawWorld) Particles.draw(cam.viewM);
     gfx.endPass();
 
     Post.present();
@@ -425,6 +436,7 @@ const App = (() => {
     setLoadProgress(0.38, '点亮天空与光影');
     gfx = await createGfx(canvas);
     Post.init(gfx);
+    Post.setQuality(quality);
     Sky.init(gfx);
     Terrain.init(gfx);
 
@@ -491,6 +503,7 @@ const App = (() => {
       getQuality: () => quality,
       setQuality(q) {
         quality = q;
+        Post.setQuality(q);
         try { localStorage.setItem('crazybike_quality', q); } catch (_) {}
       },
     });

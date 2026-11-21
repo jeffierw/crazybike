@@ -45,6 +45,8 @@ vm.runInContext(`
     buffer: () => ({ id: 1 }),
     texture: () => ({ id: 1 }),
     target: () => ({ id: 1 }),
+    destroyTarget: () => {},
+    destroyTexture: () => {},
     updateBuffer: () => {},
     updateTexture: () => {},
     pipeline: (desc) => {
@@ -188,6 +190,24 @@ vm.runInContext(`
   const enOk = I18N.t('出发') === 'START' && I18N.t('拍照模式') === 'Photo Mode';
   I18N.setLang('zh');
   assert(enOk && I18N.t('出发') === '出发', 'I18N bilingual ZH/EN switch OK');
+
+  // 6. V3 Wildlife 4-biome spawning + Quality-tier shadow scaling (512 / 1024 / 2048)
+  let wildOk = true;
+  for (const m of MOUNTAINS) {
+    Course.init(m.id, 'freeride', 202611);
+    Wildlife.reset();
+    Wildlife.step(60, 0.2, 'high');
+    const cHi = Wildlife.count();
+    Wildlife.step(60, 0.2, 'smooth');
+    const cLo = Wildlife.count();
+    Solid.clear(); Wildlife.emit(); Solid.upload();
+    if (cHi !== 16 || cLo !== 4) wildOk = false;
+  }
+  Post.setQuality('high'); const shHi = Post.shadowSize;
+  Post.setQuality('smooth'); const shLo = Post.shadowSize;
+  Post.setQuality('auto'); const shAu = Post.shadowSize;
+  assert(wildOk && shHi === 2048 && shAu === 1024 && shLo === 512,
+    'V3 4-biome Wildlife (high=16, smooth=4) & Quality Shadow Maps (2048/1024/512) OK');
 
   if (failures > 0) process.exit(1);
   console.log('\\nALL CRAZYBIKE V2 CHECKS PASSED!');
