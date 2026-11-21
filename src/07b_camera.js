@@ -42,17 +42,21 @@ const Camera = (() => {
 
   C.currentView = () => VIEWS[C.viewIdx];
   C.setView = function (idOrIdx) {
+    const prev = VIEWS[C.viewIdx].id;
     if (typeof idOrIdx === 'number') {
       C.viewIdx = ((idOrIdx % VIEWS.length) + VIEWS.length) % VIEWS.length;
     } else {
       const idx = VIEWS.findIndex(v => v.id === idOrIdx);
       if (idx >= 0) C.viewIdx = idx;
     }
-    return VIEWS[C.viewIdx].id;
+    const next = VIEWS[C.viewIdx].id;
+    if (next !== prev && (next === 'fpv' || next === 'fork' || prev === 'fpv' || prev === 'fork')) {
+      C.init = false; // clean instant mount cut into/out of helmet & fork cameras (zero mid-torso clipping!)
+    }
+    return next;
   };
   C.cycle = function (dir = 1) {
-    C.viewIdx = ((C.viewIdx + dir) % VIEWS.length + VIEWS.length) % VIEWS.length;
-    return VIEWS[C.viewIdx].id;
+    return C.setView(C.viewIdx + dir);
   };
   C.resetOrbit = function () {
     const o = C.orbit;
@@ -212,23 +216,23 @@ const Camera = (() => {
       ];
       wantFov = 64 * PI / 180;
     } else if (view === 'fpv') {
-      // Helmet Goggles FPV: perched right at rider eyes with lensCut hiding helmet/head interior!
+      // Helmet Goggles FPV: mounted squarely at front of goggles (ahead of shoulders/neck!), showing gloves, bars, fork & trail!
       const comp = clamp(R.susp || 0, -0.07, 0.26);
       const crouch = (R.charge || 0) * 0.22 + comp * 0.62 + (R.boosting ? 0.12 : 0);
-      near = 0.10;
+      near = 0.08;
       wantClear = 0.40;
-      const eyeH = 1.78 - crouch * 1.1;
-      const eyeFwd = 0.04;
+      const eyeH = 1.68 - crouch * 1.05;
+      const eyeFwd = 0.24; // cleanly forward of helmet front / shoulders so torso is behind camera!
       wantPos = [R.pos[0] + fx * eyeFwd, R.pos[1] + eyeH, R.pos[2] + fz * eyeFwd];
       const ly = R.yaw - o.yaw;
       const lfx = -Math.sin(ly), lfz = -Math.cos(ly);
-      const pitchLook = clamp(R.pitch * 0.72 - 0.16 + o.pit, -0.75, 0.65);
+      const pitchLook = clamp(R.pitch * 0.68 - 0.22 + o.pit, -0.82, 0.60);
       wantTgt = [
         wantPos[0] + lfx * 18 * Math.cos(pitchLook),
         wantPos[1] + Math.sin(pitchLook) * 18,
         wantPos[2] + lfz * 18 * Math.cos(pitchLook),
       ];
-      wantFov = (80 + spdNorm * 13 + (R.boosting ? 7 : 0)) * PI / 180;
+      wantFov = (86 + spdNorm * 13 + (R.boosting ? 7 : 0)) * PI / 180;
       wantRoll = R.roll * 0.34;
     } else if (view === 'fork') {
       // Front Fork Low Cam: riding right above the dual-crown fork & spinning knobby front tire!

@@ -236,7 +236,7 @@ const UI = (() => {
             ${App.backendName()} · ${mName(curM)} · $${c.cash} · 🏆 ${wins}/12
           </div>
           <div class="mark">
-            <div class="cn">${I18N.lang === 'en' ? 'CRAZYBIKE' : '暴走速降'}</div>
+            <div class="cn ${I18N.lang === 'en' ? 'en-word' : ''}">${I18N.lang === 'en' ? 'CRAZYBIKE' : '暴走速降'}</div>
             <div class="rule"></div>
             <div class="en">${I18N.lang === 'en' ? 'DOWNHILL DOMINATION · 3D' : 'CRAZYBIKE · DOWNHILL'}</div>
           </div>
@@ -247,7 +247,7 @@ const UI = (() => {
           <button id="btn-go" class="go-btn">${t('出发')}</button>
 
           <div style="margin-top:26px;">
-            <button id="t-career" class="rail-item"><span>${t('生涯巡回')}</span><small>4 ${bi('大山 · 12 赛事', 'MOUNTAINS · 12')}</small></button>
+            <button id="t-career" class="rail-item"><span>${t('生涯巡回')}</span><small>4 ${bi('大山 · 12 赛事', 'MOUNTAINS · 12 RACES')}</small></button>
             <button id="t-endless" class="rail-item"><span>${t('无尽暴走')}</span><small>#TODAY · AI</small></button>
             <button id="t-garage" class="rail-item"><span>${t('改装车库')}</span><small>$${c.cash}</small></button>
             <button id="t-views" class="rail-item"><span>${t('视角')}</span><small>${viewName(Camera.currentView())}</small></button>
@@ -504,10 +504,10 @@ const UI = (() => {
         </div>
       </div>
 
-      <div style="position:absolute;top:var(--gt);right:var(--gr);text-align:right;text-shadow:0 2px 16px rgba(5,8,13,.75);">
+      <div style="position:absolute;top:var(--gt);right:var(--gr);text-align:right;text-shadow:0 1px 4px rgba(0,0,0,0.92), 0 2px 18px rgba(5,8,13,0.85);">
         <div id="hud-pos" style="font-family:var(--f-lat);font-weight:300;font-size:clamp(34px,4.5vw,48px);line-height:0.95;font-variant-numeric:tabular-nums;">1<span style="font-size:16px;color:var(--dim);">/8</span></div>
-        <div id="hud-ko" style="font-size:11px;letter-spacing:0.14em;color:var(--sun);margin-top:5px;">K.O. 0 · ${t('推搡')}</div>
-        <div class="hud-bar" style="margin-left:auto;width:136px;"><i id="hud-prog-fill" style="background:var(--cyan);"></i></div>
+        <div id="hud-ko" style="font-size:12px;letter-spacing:0.12em;color:var(--sun);margin-top:5px;font-weight:500;">K.O. 0 · ${t('推搡')}</div>
+        <div class="hud-bar" style="margin-left:auto;width:142px;"><i id="hud-prog-fill" style="background:var(--cyan);"></i></div>
       </div>
 
       <div id="hud-banner" style="position:absolute;top:17%;left:50%;transform:translateX(-50%);font-family:var(--f-song);font-weight:700;font-size:clamp(22px,3.2vw,34px);letter-spacing:0.16em;text-shadow:0 4px 22px rgba(0,0,0,.85);text-align:center;pointer-events:none;white-space:nowrap;"></div>
@@ -516,11 +516,11 @@ const UI = (() => {
       <div class="hud-spd">
         <div id="hud-spd" class="num">0</div>
         <div class="unit">KM / H</div>
-        <div class="hud-bar"><i id="hud-tach"></i></div>
-        <div style="display:flex;justify-content:space-between;font-family:var(--f-lat);font-size:9px;letter-spacing:0.24em;color:var(--sun);margin-top:10px;width:132px;">
+        <div class="hud-bar" style="width:162px;"><i id="hud-tach"></i></div>
+        <div style="display:flex;justify-content:space-between;gap:12px;font-family:var(--f-lat);font-size:9px;letter-spacing:0.20em;color:var(--sun);margin-top:10px;width:162px;">
           <span>ADRENALINE</span><span id="hud-adr-pct">25%</span>
         </div>
-        <div class="hud-bar adr"><i id="hud-adr" style="width:25%;"></i></div>
+        <div class="hud-bar adr" style="width:162px;"><i id="hud-adr" style="width:25%;"></i></div>
       </div>
 
       <div class="hud-right">

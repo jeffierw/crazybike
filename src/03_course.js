@@ -240,9 +240,9 @@ const Course = (() => {
         const berm = -targetCurve * 245 * tpl.berm;
         const roll = tpl.rollA * Math.sin(spinRollPh * TAU) * blend * gateCalm;
 
-        // Smooth cliff intensity along this segment
-        const cliffFade = smooth(0, 0.12, t) * (1 - smooth(0.88, 1.0, t));
-        const cAmt = (idx === 0 ? smooth(10, 28, s) : 1.0) * cliffFade;
+        // Broad, natural geological cliff-rim transition (no abrupt knife-edge wall transitions!)
+        const cliffFade = smooth(0, 0.28, t) * (1 - smooth(0.72, 1.0, t));
+        const cAmt = (idx === 0 ? smooth(14, 42, s) : 1.0) * cliffFade;
         const cliffL = cliffSide === -1 ? cAmt : 0;
         const cliffR = cliffSide ===  1 ? cAmt : 0;
 

@@ -283,11 +283,8 @@ const RiderMesh = (() => {
       // Rear aero ridge / spoiler
       const ridge = rbx(a, b, d, 0, 0.042, 0.136, 0.064, 0.026, 0.028, 0.014);
       helm = smin(helm, ridge, 0.015);
-      // Recessed curved motocross goggles + wrap-around strap
-      const gogMain = rbx(a, b, d, 0, 0.010, -0.116, 0.094, 0.042, 0.038, 0.022);
-      const strapShell = E(a, b, d, 0, 0.038, 0.010, 0.127, 0.131, 0.149);
-      const strap = smax(strapShell, Math.abs(b - 0.008) - 0.022, 0.004);
-      const gog = Math.min(gogMain, strap);
+      // Recessed curved motocross goggles (front visor only; wrap-around strap is shaded razor-smooth per-pixel!)
+      const gog = rbx(a, b, d, 0, 0.010, -0.118, 0.094, 0.042, 0.036, 0.022);
 
       hdHelm = helm; hdGog = gog; hdNeck = neck;
       return smin(smin(helm, gog, 0.006), neck, 0.016);
@@ -520,7 +517,7 @@ const RiderMesh = (() => {
     bind = solvePose(BIND_DESC);
     invBind = bind.F.map(m => m4.invert(m));
     const body = buildRiderSDF(bind);
-    const raw = meshSDF(body.f, [-0.54, 0.28, -0.52], [0.54, 2.02, 0.44], 0.022, {
+    const raw = meshSDF(body.f, [-0.54, 0.28, -0.52], [0.54, 2.02, 0.44], 0.0195, {
       stride: 4,
       attr: body.attr,
       repair: true,
@@ -550,7 +547,8 @@ fn skinVertex(pos: vec3f, nrm: vec3f, bw: vec4f, baseRow: i32) -> SkinV {
   let b0: i32 = i32(bw.x + 0.5);
   let b1: i32 = i32(bw.y + 0.5);
   let b2: i32 = i32(floor(bw.w));
-  let w2: f32 = fract(bw.w);
+  let rawW2: f32 = fract(bw.w);
+  let w2: f32 = select(0.0, rawW2, rawW2 > 0.002);
   let w0: f32 = bw.z * (1.0 - w2);
   let w1: f32 = (1.0 - bw.z) * (1.0 - w2);
 
@@ -561,7 +559,7 @@ fn skinVertex(pos: vec3f, nrm: vec3f, bw: vec4f, baseRow: i32) -> SkinV {
 
   var wp: vec3f = (m0 * p4).xyz * w0 + (m1 * p4).xyz * w1;
   var wn: vec3f = (m0 * n4).xyz * w0 + (m1 * n4).xyz * w1;
-  if (w2 > 0.002) {
+  if (w2 > 0.001) {
     let m2: mat4x4f = fetchBone(baseRow, b2);
     wp = wp + (m2 * p4).xyz * w2;
     wn = wn + (m2 * n4).xyz * w2;
@@ -618,9 +616,9 @@ fn skinVertex(pos: vec3f, nrm: vec3f, bw: vec4f, baseRow: i32) -> SkinV {
           let hZ: f32 = v.mat.w;
           let distCam: f32 = length(v.wp - U.camPos.xyz);
 
-          // FPV camera lensCut: cleanly hide helmet, goggles, pack, neck & near-lens torso so FPV never clips inside the head!
+          // FPV camera lensCut: hide helmet, goggles, pack, neck & central torso/shoulders so ONLY forearms, gloves & bike remain cleanly in view!
           if (M.uMeta.z > 0.5) {
-            if (id > 4.5 || distCam < M.uMeta.w) {
+            if (id > 4.5 || (id < 0.5 && abs(v.bp.x) < 0.25) || distCam < M.uMeta.w) {
               discard;
             }
           }
@@ -649,9 +647,9 @@ fn skinVertex(pos: vec3f, nrm: vec3f, bw: vec4f, baseRow: i32) -> SkinV {
             rough = 0.74;
             clothSheen = 0.24;
           } else if (id < 1.5) {
-            // 1: Baggy MTB Freeride Shorts
-            let sidePiping: f32 = smoothstep(0.175, 0.205, abs(v.bp.x));
-            alb = mix(vec3f(0.11, 0.12, 0.15), M.uAccent.rgb * 0.75, sidePiping * 0.65);
+            // 1: Baggy MTB Freeride Shorts (pro dark slate + crisp outer seam stripe!)
+            let outerStripe: f32 = (1.0 - smoothstep(0.012, 0.024, abs(v.bp.z - 0.14))) * smoothstep(0.17, 0.22, abs(v.bp.x));
+            alb = mix(vec3f(0.11, 0.12, 0.15), M.uAccent.rgb * 0.85, outerStripe * 0.72);
             let weave: f32 = vnoise(v.bp.yz * 48.0 + v.bp.x * 24.0);
             alb = alb * (0.93 + 0.12 * weave);
             rough = 0.82;
@@ -672,14 +670,15 @@ fn skinVertex(pos: vec3f, nrm: vec3f, bw: vec4f, baseRow: i32) -> SkinV {
             alb = mix(vec3f(0.12, 0.13, 0.15), vec3f(0.88, 0.86, 0.80), sole);
             rough = 0.66;
           } else if (id < 5.5) {
-            // 5: Glossy Full-Face Motocross Helmet + Center Racing Stripe + Black Chin Vent
-            let centerStripe: f32 = 1.0 - smoothstep(0.020, 0.034, abs(v.bp.x));
+            // 5: Glossy Full-Face Motocross Helmet + Center Racing Stripe + Razor-Smooth Per-Pixel Goggle Strap + Chin Vent
+            let centerStripe: f32 = 1.0 - smoothstep(0.020, 0.032, abs(v.bp.x));
+            let gogStrap: f32 = (1.0 - smoothstep(0.018, 0.026, abs(hY - 0.012))) * smoothstep(-0.095, -0.055, hZ);
             let chinVent: f32 = smoothstep(-0.085, -0.118, hZ) * (1.0 - smoothstep(-0.03, 0.01, hY));
             let underPeak: f32 = smoothstep(0.075, 0.105, hY) * smoothstep(-0.11, -0.15, hZ);
             alb = mix(M.uHelmet.rgb, vec3f(0.97, 0.97, 0.98), centerStripe * 0.85);
-            alb = mix(alb, vec3f(0.07, 0.08, 0.10), max(chinVent * 0.88, underPeak * 0.45));
-            rough = 0.18;
-            mirrorBoost = 0.25;
+            alb = mix(alb, vec3f(0.06, 0.06, 0.08), max(gogStrap * 0.95, max(chinVent * 0.88, underPeak * 0.45)));
+            rough = mix(0.18, 0.78, gogStrap);
+            mirrorBoost = 0.25 * (1.0 - gogStrap);
           } else if (id < 6.5) {
             // 6: Mirrored Motocross Goggles (iridescent lens in front, matte black strap around back)
             let isLens: f32 = smoothstep(-0.075, -0.098, hZ);

@@ -429,7 +429,7 @@ const Physics = (() => {
       triggerCrash(R, 'cliff', sign(R.u) * 4, 0, R.lastHitBy);
       return;
     }
-    const maxU = spNow.hw + 24;
+    const maxU = R.isPlayer ? (spNow.hw + 24) : (spNow.hw + 4.2);
     if (Math.abs(R.u) > maxU) {
       const sgn = sign(R.u);
       R.pos[0] = spNow.cx + sgn * maxU;

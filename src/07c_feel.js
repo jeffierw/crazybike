@@ -7,6 +7,7 @@ const Input = (() => {
 
   function init(canvas) {
     addEventListener('keydown', e => {
+      if (typeof Photo !== 'undefined' && Photo.on) return;
       if (!keys[e.code]) {
         if (e.code === 'KeyQ' || e.code === 'KeyJ') justPressed.atkL = true;
         if (e.code === 'KeyE' || e.code === 'KeyK') justPressed.atkR = true;

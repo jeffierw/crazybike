@@ -72,7 +72,7 @@ const Photo = (() => {
       if (!P.on) return;
       keys[e.code] = true;
       if (e.repeat) return;
-      if (e.code === 'Escape') { e.preventDefault(); P.exit(); }
+      if (e.code === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); P.exit(); }
       else if (e.code === 'Enter' || e.code === 'KeyP') { e.preventDefault(); P.capture(); }
       else if (e.code === 'KeyR') P.reset();
       else if (e.code === 'KeyH') {
