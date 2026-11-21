@@ -37,13 +37,14 @@ vm.runInContext(`
     else console.log('PASS:', msg);
   }
 
-  // 1. Verify all pipelines translate cleanly to both WGSL and GLSL ES 3.00
+  // 1. Verify all pipelines translate cleanly to both WGSL and GLSL ES 3.00 + SDF RiderMesh audit
   const pipes = [];
   const mockGfx = {
     buffer: () => ({ id: 1 }),
     texture: () => ({ id: 1 }),
     target: () => ({ id: 1 }),
     updateBuffer: () => {},
+    updateTexture: () => {},
     pipeline: (desc) => {
       const w = buildShader(desc, 'wgsl');
       const g = buildShader(desc, 'glsl');
@@ -53,7 +54,12 @@ vm.runInContext(`
     },
   };
   Post.init(mockGfx); Sky.init(mockGfx); Terrain.init(mockGfx); Solid.init(mockGfx); Particles.init(mockGfx);
-  assert(pipes.length === 6, 'All 6 GPU pipelines compiled to WGSL + GLSL (' + pipes.join(', ') + ')');
+  assert(pipes.length >= 8, 'All ' + pipes.length + ' GPU pipelines compiled to WGSL + GLSL (' + pipes.join(', ') + ')');
+  const rm = RiderMesh.info();
+  let badRm = 0;
+  for (let i = 0; i < rm.V.length; i++) if (!Number.isFinite(rm.V[i])) badRm++;
+  for (let i = 0; i < rm.W.length; i++) if (!Number.isFinite(rm.W[i])) badRm++;
+  assert(rm && rm.nv > 2000 && rm.ms < 1200 && badRm === 0, 'SDF RiderMesh built cleanly (' + rm.nv + ' verts, ' + (rm.ni / 3) + ' tris in ' + Math.round(rm.ms) + 'ms, 0 NaN)');
 
   // 2. Terrain build speed & 4-mountain 8-rider simulation + camera clearance audit
   const t0 = Date.now();
