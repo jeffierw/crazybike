@@ -1,43 +1,151 @@
-// ---------------------------------------------------------------- 07b_camera: dynamic chase / low / FPV cameras with hard near-plane ground clearance guard
+// ---------------------------------------------------------------- 07b_camera: 8-view cinematic camera rig, non-blocking chase angle, 360-orbit drag & start-gate hero framing
 const Camera = (() => {
   Variants.def('cam', '镜头风格', [['a', '贴地激进'], ['b', '标准街机'], ['c', '高广角']], 'b');
 
-  const VIEWS = ['chase', 'low', 'fpv'];
+  const VIEWS = [
+    { id: 'chase', name: '追尾',   en: 'Chase' },
+    { id: 'low',   name: '贴地',   en: 'Low' },
+    { id: 'fpv',   name: '头盔',   en: 'Helmet FPV' },
+    { id: 'fork',  name: '前叉',   en: 'Front Fork' },
+    { id: 'high',  name: '俯瞰',   en: 'High' },
+    { id: 'left',  name: '左侧',   en: 'Left' },
+    { id: 'right', name: '右侧',   en: 'Right' },
+    { id: 'front', name: '正面',   en: 'Front' },
+  ];
+
+  const PRESETS = {
+    a: { dist: 4.55, height: 2.75, look: 16, baseFov: 70, downDrop: 0.68 },
+    b: { dist: 5.25, height: 3.30, look: 18, baseFov: 68, downDrop: 0.72 },
+    c: { dist: 6.45, height: 4.05, look: 21, baseFov: 73, downDrop: 0.76 },
+  };
+
   const C = {
+    VIEWS,
     viewIdx: 0,
     pos: [0, 10, 0],
     target: [0, 8, -10],
     fov: 68 * PI / 180,
     roll: 0,
-    near: 0.32,
-    far: 920,
+    near: 0.24,
+    far: 980,
     init: false,
     minClearance: 99,
+    lastCam: null,
+    // 360-degree orbit / look-around state (active on Title, Pause, and right-drag / IJKL during race)
+    orbit: {
+      yaw: 0, pit: 0, zoom: 1.0,
+      tYaw: 0, tPit: 0, tZoom: 1.0,
+      drag: null, idle: 9, keys: {},
+      freeMode: false, // true on Title / Pause so left-drag orbits freely & stays put!
+    },
   };
 
-  const PRESETS = {
-    a: { dist: 4.5, height: 1.95, look: 15, baseFov: 68 },
-    b: { dist: 5.4, height: 2.45, look: 17, baseFov: 66 },
-    c: { dist: 6.6, height: 3.15, look: 20, baseFov: 70 },
+  C.currentView = () => VIEWS[C.viewIdx];
+  C.setView = function (idOrIdx) {
+    if (typeof idOrIdx === 'number') {
+      C.viewIdx = ((idOrIdx % VIEWS.length) + VIEWS.length) % VIEWS.length;
+    } else {
+      const idx = VIEWS.findIndex(v => v.id === idOrIdx);
+      if (idx >= 0) C.viewIdx = idx;
+    }
+    return VIEWS[C.viewIdx].id;
   };
-
-  C.cycle = function () {
-    C.viewIdx = (C.viewIdx + 1) % VIEWS.length;
-    return VIEWS[C.viewIdx];
+  C.cycle = function (dir = 1) {
+    C.viewIdx = ((C.viewIdx + dir) % VIEWS.length + VIEWS.length) % VIEWS.length;
+    return VIEWS[C.viewIdx].id;
   };
-
+  C.resetOrbit = function () {
+    const o = C.orbit;
+    o.yaw = o.pit = o.tYaw = o.tPit = 0;
+    o.zoom = o.tZoom = 1.0;
+    o.idle = 9;
+  };
   C.reset = function () {
     C.init = false;
     C.minClearance = 99;
+    C.resetOrbit();
   };
 
-  // Enforce ground clearance for camera eye + bottom corners of near plane (inspired by cold-smoke camclear)
-  function guardGround(pos, fwd, right, up, fovY, aspect) {
+  // Attach mouse/touch 360-orbit + keyboard camera view hotkeys (1..8, Shift+V, IJKL)
+  C.bindInput = function (canvas) {
+    if (!canvas || C._bound) return;
+    C._bound = true;
+    const o = C.orbit;
+
+    addEventListener('keydown', e => {
+      if (e.metaKey || e.ctrlKey || e.altKey || (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || ''))) return;
+      if (typeof Photo !== 'undefined' && Photo.on) return;
+      const c = e.code;
+      if (c === 'KeyI' || c === 'KeyJ' || c === 'KeyK' || c === 'KeyL') { o.keys[c] = true; return; }
+      if (e.repeat) return;
+      if (c === 'KeyV' && e.shiftKey) { C.cycle(-1); return; }
+      const m = /^(?:Digit|Numpad)([1-8])$/.exec(c);
+      if (m) C.setView(+m[1] - 1);
+    });
+    addEventListener('keyup', e => { o.keys[e.code] = false; });
+    addEventListener('blur', () => { o.keys = {}; o.drag = null; });
+
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+    canvas.addEventListener('pointerdown', e => {
+      if (typeof Photo !== 'undefined' && Photo.on) return;
+      // Left-drag orbits when in Title/Pause/Garage; Right-drag orbits anytime!
+      const allowLeft = o.freeMode;
+      if (e.button === 2 || (allowLeft && e.button === 0)) {
+        o.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, btn: e.button };
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      }
+    });
+    canvas.addEventListener('pointermove', e => {
+      if (!o.drag || e.pointerId !== o.drag.id) return;
+      const dx = e.clientX - o.drag.x, dy = e.clientY - o.drag.y;
+      o.drag.x = e.clientX; o.drag.y = e.clientY;
+      const sens = 4.2 / Math.max(innerWidth || 1000, 400);
+      o.tYaw -= dx * sens;
+      o.tPit = clamp(o.tPit + dy * sens * 0.72, -0.58, 0.92);
+      o.idle = 0;
+    });
+    const lift = e => { if (o.drag && e.pointerId === o.drag.id) o.drag = null; };
+    canvas.addEventListener('pointerup', lift);
+    canvas.addEventListener('pointercancel', lift);
+
+    canvas.addEventListener('wheel', e => {
+      if (typeof Photo !== 'undefined' && Photo.on) return;
+      if (!o.freeMode) return;
+      e.preventDefault();
+      o.tZoom = clamp(o.tZoom * Math.exp(e.deltaY * 0.0012), 0.55, 2.25);
+    }, { passive: false });
+  };
+
+  function stepOrbit(dt, isFree) {
+    const o = C.orbit;
+    o.freeMode = isFree;
+    const kx = (o.keys.KeyL ? 1 : 0) - (o.keys.KeyJ ? 1 : 0);
+    const ky = (o.keys.KeyI ? 1 : 0) - (o.keys.KeyK ? 1 : 0);
+    if (kx || ky) {
+      o.tYaw += kx * 2.1 * dt;
+      o.tPit = clamp(o.tPit + ky * 1.4 * dt, -0.55, 0.88);
+      o.idle = 0;
+    }
+    if (!o.drag && !kx && !ky) {
+      o.idle += dt;
+      // During active riding, spring look-around smoothly back behind rider after 0.9s
+      if (!isFree && o.idle > 0.9) {
+        o.tYaw = damp(o.tYaw, 0, 5.5, dt);
+        o.tPit = damp(o.tPit, 0, 5.5, dt);
+        o.tZoom = damp(o.tZoom, 1.0, 5.5, dt);
+      }
+    }
+    o.yaw = damp(o.yaw, o.tYaw, 14, dt);
+    o.pit = damp(o.pit, o.tPit, 14, dt);
+    o.zoom = damp(o.zoom, o.tZoom, 12, dt);
+  }
+
+  // Enforce ground clearance for camera eye + bottom corners of near plane
+  function guardGround(pos, fwd, right, up, fovY, aspect, minWant = 0.45) {
     const gy = Course.height(pos[0], pos[2]);
     let minH = pos[1] - gy;
     const hh = C.near * Math.tan(fovY * 0.5);
     const hw = hh * aspect;
-    // Check bottom-left, bottom-center, bottom-right corners of near plane
     for (const sx of [-1, 0, 1]) {
       const px = pos[0] + fwd[0] * C.near + right[0] * hw * sx - up[0] * hh;
       const py = pos[1] + fwd[1] * C.near + right[1] * hw * sx - up[1] * hh;
@@ -45,47 +153,140 @@ const Camera = (() => {
       const d = py - Course.height(px, pz);
       if (d < minH) minH = d;
     }
-    const wantClear = 0.45;
-    if (minH < wantClear) {
-      pos[1] += (wantClear - minH);
-      minH = wantClear;
+    if (minH < minWant) {
+      pos[1] += (minWant - minH);
+      minH = minWant;
     }
     C.minClearance = Math.min(C.minClearance, minH);
     return minH;
   }
 
-  C.update = function (R, dt, aspect, feel) {
-    const view = VIEWS[C.viewIdx];
+  function makeCam(eye, target, upHint, fov, near, aspect) {
+    const fwd = v3.norm(v3.sub(target, eye));
+    const right = v3.norm(v3.cross(fwd, upHint));
+    const up = v3.cross(right, fwd);
+    const viewM = m4.lookAt(eye, target, up);
+    const projM = m4.perspective(fov, aspect, near, C.far);
+    const cam = { eye, target, fwd, right, up, fov, near, viewM, projM, vp: m4.mul(projM, viewM) };
+    C.lastCam = cam;
+    return cam;
+  }
+
+  // ---- Main Race / Pause Camera Update ----
+  C.update = function (R, dt, aspect, feel, isPaused = false) {
+    stepOrbit(dt, isPaused);
+    const view = VIEWS[C.viewIdx].id;
     const preset = PRESETS[Variants.val.cam] || PRESETS.b;
     const spdNorm = sat((R.speed - 10) / 26);
+    const o = C.orbit;
+
+    // Activate FPV lensCut ONLY when inside helmet view (hides helmet, goggles, pack, neck — zero clipping!)
+    if (typeof RiderMesh !== 'undefined') {
+      RiderMesh.fpvRiderId = (!R.crashed && view === 'fpv' && !isPaused) ? R.id : -1;
+    }
 
     const fx = -Math.sin(R.yaw), fz = -Math.cos(R.yaw);
-    let wantPos, wantTgt, wantFov, wantRoll = 0;
+    const rx =  Math.cos(R.yaw), rz = -Math.sin(R.yaw);
+    const spHere = Course.at(R.s);
+    const slope = spHere.slope || 0.34;
+    let wantPos, wantTgt, wantFov, wantRoll = 0, wantClear = 0.45, near = 0.24;
 
     if (R.crashed) {
-      // Dramatic orbit-chase watching the ragdoll wipeout!
-      wantPos = [R.ragPos[0] + 3.8, R.ragPos[1] + 2.8, R.ragPos[2] + 5.8];
-      wantTgt = [R.ragPos[0], R.ragPos[1] + 0.5, R.ragPos[2]];
+      const ang = o.yaw + 0.55;
+      const dist = 6.2 * o.zoom;
+      wantPos = [R.ragPos[0] + Math.sin(ang) * dist, R.ragPos[1] + 2.8 + o.pit * 3.0, R.ragPos[2] + Math.cos(ang) * dist];
+      wantTgt = [R.ragPos[0], R.ragPos[1] + 0.55, R.ragPos[2]];
       wantFov = 62 * PI / 180;
+    } else if (isPaused && (Math.abs(o.yaw) > 0.02 || Math.abs(o.pit) > 0.02 || Math.abs(o.zoom - 1) > 0.02)) {
+      // Smooth 360-degree environment inspection orbit while paused!
+      const baseDist = 5.4 * o.zoom;
+      const yawA = R.yaw + o.yaw;
+      const pitA = clamp(0.32 + o.pit, -0.20, 1.15);
+      const cp = Math.cos(pitA), sp = Math.sin(pitA);
+      // Slight left-bias offset so paused rider sits cleanly to the right of the left menu rail!
+      wantTgt = [R.pos[0] - rx * 0.65, R.pos[1] + 1.15, R.pos[2] - rz * 0.65];
+      wantPos = [
+        wantTgt[0] + Math.sin(yawA) * baseDist * cp,
+        wantTgt[1] + baseDist * sp,
+        wantTgt[2] + Math.cos(yawA) * baseDist * cp,
+      ];
+      wantFov = 64 * PI / 180;
     } else if (view === 'fpv') {
-      wantPos = [R.pos[0] + fx * 0.25, R.pos[1] + 1.82 - (R.susp || 0) * 0.6, R.pos[2] + fz * 0.25];
-      wantTgt = [R.pos[0] + fx * 18, R.pos[1] + 1.4 + Math.sin(R.pitch) * 14, R.pos[2] + fz * 18];
-      wantFov = (76 + spdNorm * 14 + (R.boosting ? 7 : 0)) * PI / 180;
-      wantRoll = R.roll * 0.35;
+      // Helmet Goggles FPV: perched right at rider eyes with lensCut hiding helmet/head interior!
+      const comp = clamp(R.susp || 0, -0.07, 0.26);
+      const crouch = (R.charge || 0) * 0.22 + comp * 0.62 + (R.boosting ? 0.12 : 0);
+      near = 0.10;
+      wantClear = 0.40;
+      const eyeH = 1.78 - crouch * 1.1;
+      const eyeFwd = 0.04;
+      wantPos = [R.pos[0] + fx * eyeFwd, R.pos[1] + eyeH, R.pos[2] + fz * eyeFwd];
+      const ly = R.yaw - o.yaw;
+      const lfx = -Math.sin(ly), lfz = -Math.cos(ly);
+      const pitchLook = clamp(R.pitch * 0.72 - 0.16 + o.pit, -0.75, 0.65);
+      wantTgt = [
+        wantPos[0] + lfx * 18 * Math.cos(pitchLook),
+        wantPos[1] + Math.sin(pitchLook) * 18,
+        wantPos[2] + lfz * 18 * Math.cos(pitchLook),
+      ];
+      wantFov = (80 + spdNorm * 13 + (R.boosting ? 7 : 0)) * PI / 180;
+      wantRoll = R.roll * 0.34;
+    } else if (view === 'fork') {
+      // Front Fork Low Cam: riding right above the dual-crown fork & spinning knobby front tire!
+      near = 0.12;
+      wantClear = 0.28;
+      const comp = clamp(R.susp || 0, -0.07, 0.26);
+      wantPos = [R.pos[0] + fx * 0.28, R.pos[1] + 0.96 - comp * 0.55, R.pos[2] + fz * 0.28];
+      wantTgt = [R.pos[0] + fx * 16, R.pos[1] + 0.55 - slope * 8.5, R.pos[2] + fz * 16];
+      wantFov = (84 + spdNorm * 14 + (R.boosting ? 8 : 0)) * PI / 180;
+      wantRoll = R.roll * 0.42;
+    } else if (view === 'left' || view === 'right' || view === 'front' || view === 'high') {
+      // Multi-angle action rigs (smoothly switchable via V / 5-8)
+      let azOff = 0, dist = 6.0, h = 2.0, tf = 3.0, th = 1.1, fovDeg = 62;
+      if (view === 'high')  { azOff = 0;    dist = 8.6; h = 6.8; tf = 15.0; th = 0.6; fovDeg = 66; }
+      if (view === 'left')  { azOff = -1.25; dist = 5.4; h = 1.75; tf = 2.6; th = 1.05; fovDeg = 58; }
+      if (view === 'right') { azOff =  1.25; dist = 5.4; h = 1.75; tf = 2.6; th = 1.05; fovDeg = 58; }
+      if (view === 'front') { azOff =  PI;   dist = 5.8; h = 1.65; tf = -0.8; th = 1.10; fovDeg = 58; }
+      const ang = R.yaw + azOff + o.yaw;
+      const d = dist * o.zoom;
+      wantPos = [R.pos[0] + Math.sin(ang) * d, R.pos[1] + h + o.pit * 3.0 + (R.air ? 0.4 : 0), R.pos[2] + Math.cos(ang) * d];
+      wantTgt = [R.pos[0] + fx * tf, R.pos[1] + th - (view === 'high' ? slope * 5.0 : 0), R.pos[2] + fz * tf];
+      wantFov = (fovDeg + spdNorm * 8) * PI / 180;
+      wantRoll = view === 'front' ? -R.roll * 0.12 : R.roll * 0.08;
     } else {
+      // Default CHASE & LOW views: elevated downward downhill pitch so rider sits in LOWER 1/3, NEVER blocking the road ahead!
       const isLow = view === 'low';
-      const dist = (isLow ? 4.1 : preset.dist) + spdNorm * 0.9 + (R.boosting ? 0.65 : 0) + (R.air ? 0.8 : 0);
-      const height = (isLow ? 1.55 : preset.height) + (R.air ? 0.35 : 0) - (feel.landDip || 0);
-      // Keep camera slightly aligned with course spine so steep bends stay readable
-      const sp = Course.at(R.s + 14);
-      const lookDirX = lerp(fx, clamp((sp.cx - R.pos[0]) * 0.04, -0.5, 0.5), 0.22);
+      const dist = ((isLow ? 4.35 : preset.dist) + spdNorm * 0.85 + (R.boosting ? 0.65 : 0) + (R.air ? 0.95 : 0)) * o.zoom;
+      const height = (isLow ? 2.15 : preset.height) + (R.air ? 0.55 : 0) - (feel.landDip || 0) + o.pit * 3.2;
+
+      // Subtle track-spine & turn-apex side lead so upcoming curves, ramps & cliffs read early!
+      const spAhead = Course.at(R.s + 16);
+      const lookDirX = lerp(fx, clamp((spAhead.cx - R.pos[0]) * 0.04, -0.5, 0.5), 0.24);
       const lookDirZ = fz;
       const dl = Math.hypot(lookDirX, lookDirZ) || 1;
-      const dx = lookDirX / dl, dz = lookDirZ / dl;
+      let dx = lookDirX / dl, dz = lookDirZ / dl;
+      // Apply look-around yaw during chase
+      if (Math.abs(o.yaw) > 0.002) {
+        const cy = Math.cos(o.yaw), sy = Math.sin(o.yaw);
+        const ndx = dx * cy - dz * sy, ndz = dx * sy + dz * cy;
+        dx = ndx; dz = ndz;
+      }
 
-      wantPos = [R.pos[0] - dx * dist, R.pos[1] + height, R.pos[2] - dz * dist];
-      wantTgt = [R.pos[0] + dx * preset.look, R.pos[1] + 1.15 - (R.air ? 0.3 : 0), R.pos[2] + dz * preset.look];
-      wantFov = (preset.baseFov + spdNorm * 14 + (R.boosting ? 8 : 0)) * PI / 180;
+      // Slight lateral offset into turns so rider silhouette never covers the apex!
+      const sideLead = clamp(-(R.steer || 0) * 0.55, -0.65, 0.65);
+      wantPos = [
+        R.pos[0] - dx * dist + rx * sideLead,
+        R.pos[1] + height,
+        R.pos[2] - dz * dist + rz * sideLead,
+      ];
+      // Look FAR downhill along the slope so the bike sits cleanly in the lower 1/3 of screen!
+      const lookDist = preset.look;
+      const slopeDrop = slope * lookDist * (isLow ? 0.48 : preset.downDrop);
+      wantTgt = [
+        R.pos[0] + dx * lookDist,
+        R.pos[1] + (isLow ? 1.15 : 1.05) - slopeDrop * 0.55 - (R.air ? 0.45 : 0),
+        R.pos[2] + dz * lookDist,
+      ];
+      wantFov = (preset.baseFov + spdNorm * 13 + (R.boosting ? 8 : 0)) * PI / 180;
       wantRoll = R.roll * 0.14 + (feel.flinchRoll || 0);
     }
 
@@ -96,20 +297,20 @@ const Camera = (() => {
       C.roll = wantRoll;
       C.init = true;
     } else {
-      const kPos = view === 'fpv' ? 28 : 11;
-      const kTgt = view === 'fpv' ? 28 : 14;
+      const kPos = (view === 'fpv' || view === 'fork') ? 32 : isPaused ? 14 : 11;
+      const kTgt = (view === 'fpv' || view === 'fork') ? 32 : isPaused ? 14 : 14;
       C.pos[0] = damp(C.pos[0], wantPos[0], kPos, dt);
-      C.pos[1] = damp(C.pos[1], wantPos[1], kPos * 0.85, dt);
+      C.pos[1] = damp(C.pos[1], wantPos[1], kPos * 0.88, dt);
       C.pos[2] = damp(C.pos[2], wantPos[2], kPos, dt);
       C.target[0] = damp(C.target[0], wantTgt[0], kTgt, dt);
       C.target[1] = damp(C.target[1], wantTgt[1], kTgt, dt);
       C.target[2] = damp(C.target[2], wantTgt[2], kTgt, dt);
-      C.fov = damp(C.fov, wantFov, 7, dt);
+      C.fov = damp(C.fov, wantFov, 7.5, dt);
       C.roll = damp(C.roll, wantRoll, 9, dt);
     }
 
-    // Apply impact shake
-    const sh = feel.shake || 0;
+    C.near = near;
+    const sh = isPaused ? 0 : (feel.shake || 0);
     const eye = [
       C.pos[0] + (Math.random() - 0.5) * sh,
       C.pos[1] + (Math.random() - 0.5) * sh,
@@ -120,22 +321,66 @@ const Camera = (() => {
     const worldUp = [Math.sin(C.roll), Math.cos(C.roll), 0];
     const right = v3.norm(v3.cross(fwd, worldUp));
     const up = v3.cross(right, fwd);
+    guardGround(eye, fwd, right, up, C.fov, aspect, wantClear);
 
-    guardGround(eye, fwd, right, up, C.fov, aspect);
-
-    const viewM = m4.lookAt(eye, C.target, up);
-    const projM = m4.perspective(C.fov, aspect, C.near, C.far);
-    return { eye, target: C.target, viewM, projM, vp: m4.mul(projM, viewM) };
+    return makeCam(eye, C.target, worldUp, C.fov, near, aspect);
   };
 
-  // Garage showroom orbiting camera (framed cleanly left of the upgrade card column)
-  C.garageView = function (angle, aspect) {
-    const rad = 4.1;
-    const tgt = [0.55, 0.92, 0];
-    const eye = [tgt[0] + Math.sin(angle) * rad, 1.58, Math.cos(angle) * rad];
-    const viewM = m4.lookAt(eye, tgt, [0, 1, 0]);
-    const projM = m4.perspective(46 * PI / 180, aspect, 0.2, 200);
-    return { eye, target: tgt, viewM, projM, vp: m4.mul(projM, viewM) };
+  // ---- Start-Gate Poised Title Screen Hero Camera (Cold-Smoke-inspired 3/4 side-rear composition!) ----
+  // Rider sits poised on the right third of the screen overlooking the sheer cliff & mountain valley ahead;
+  // left third stays open for editorial typography & pre-start settings, and drags smoothly 360 degrees!
+  C.titleView = function (R, dt, aspect, time) {
+    stepOrbit(dt, true);
+    if (typeof RiderMesh !== 'undefined') RiderMesh.fpvRiderId = -1;
+    const o = C.orbit;
+    const sway = Math.sin(time * 0.28) * 0.05;
+    const az = -0.62 + sway + o.yaw; // 3/4 rear-left looking past rider toward cliff & downhill start gate!
+    const dist = 4.45 * o.zoom;
+    const pit = clamp(0.18 + o.pit, -0.18, 0.95);
+
+    // Offset look target slightly left & downrange so the poised rider frames elegantly in the right half!
+    const tgt = [R.pos[0] - 0.85, R.pos[1] + 1.08, R.pos[2] - 2.4];
+    const eye = [
+      R.pos[0] + Math.sin(az) * dist * Math.cos(pit),
+      R.pos[1] + 1.48 + dist * Math.sin(pit),
+      R.pos[2] + Math.cos(az) * dist * Math.cos(pit),
+    ];
+
+    if (!C.init) {
+      C.pos = eye.slice();
+      C.target = tgt.slice();
+      C.fov = 54 * PI / 180;
+      C.roll = 0;
+      C.init = true;
+    } else {
+      C.pos[0] = damp(C.pos[0], eye[0], 10, dt);
+      C.pos[1] = damp(C.pos[1], eye[1], 10, dt);
+      C.pos[2] = damp(C.pos[2], eye[2], 10, dt);
+      C.target[0] = damp(C.target[0], tgt[0], 10, dt);
+      C.target[1] = damp(C.target[1], tgt[1], 10, dt);
+      C.target[2] = damp(C.target[2], tgt[2], 10, dt);
+      C.fov = damp(C.fov, 54 * PI / 180, 8, dt);
+    }
+
+    C.near = 0.20;
+    const fwd = v3.norm(v3.sub(C.target, C.pos));
+    const right = v3.norm(v3.cross(fwd, [0, 1, 0]));
+    const up = v3.cross(right, fwd);
+    const eCopy = C.pos.slice();
+    guardGround(eCopy, fwd, right, up, C.fov, aspect, 0.45);
+    return makeCam(eCopy, C.target, [0, 1, 0], C.fov, 0.20, aspect);
+  };
+
+  // ---- Garage Showroom Camera (with interactive 360 drag + gentle auto-turn) ----
+  C.garageView = function (angle, aspect, dt = 1 / 60) {
+    stepOrbit(dt, true);
+    if (typeof RiderMesh !== 'undefined') RiderMesh.fpvRiderId = -1;
+    const o = C.orbit;
+    const rad = 3.85 * o.zoom;
+    const a = angle + o.yaw;
+    const tgt = [0.55, 0.96, 0];
+    const eye = [tgt[0] + Math.sin(a) * rad, clamp(1.56 + o.pit * 2.2, 0.55, 3.6), Math.cos(a) * rad];
+    return makeCam(eye, tgt, [0, 1, 0], 45 * PI / 180, 0.20, aspect);
   };
 
   return C;
