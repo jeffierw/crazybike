@@ -87,9 +87,10 @@ const App = (() => {
     Wildlife.step(12, 1 / 60, quality);
   }
 
-  function startRun(mountainId, modeId, seed, diff, eventObj = null, seamlessFromTitle = false) {
+  function startRun(mountainId, modeId, seed, diff, eventObj = null, seamlessFromTitle = false, solo = false) {
     activeEvent = eventObj;
-    activeEndless = modeId === 'endless' ? { mountainId, seed, diff } : null;
+    const isSolo = !!solo;
+    activeEndless = modeId === 'endless' ? { mountainId, seed, diff, solo: isSolo } : null;
     const sameMount = seamlessFromTitle && Course.mountain.id === mountainId && modeId === 'freeride';
     if (!sameMount) {
       Course.init(mountainId, modeId, seed);
@@ -111,7 +112,7 @@ const App = (() => {
 
     player = createPlayerFromCareer(12);
     player.idleMode = false;
-    rivals = AI.spawnPack(diff);
+    rivals = isSolo ? [] : AI.spawnPack(diff);
     allRiders = [player, ...rivals];
     state = 'race';
     Music.setMode('race');
@@ -471,10 +472,18 @@ const App = (() => {
         Camera.reset();
       },
       startEvent(ev, seamless = false) {
-        startRun(ev.mountainId, ev.modeId, ev.seed, ev.diff, ev, seamless);
+        startRun(ev.mountainId, ev.modeId, ev.seed, ev.diff, ev, seamless, false);
       },
-      startEndless(mId, seed, diff) {
-        startRun(mId, 'endless', seed, diff, null, false);
+      startEndless(mId, seed, diff, solo = true) {
+        startRun(mId, 'endless', seed, diff, null, false, solo);
+      },
+      switchMountainNow(mId) {
+        if (activeEndless) {
+          startRun(mId, 'endless', activeEndless.seed, activeEndless.diff, null, false, activeEndless.solo !== false);
+        } else {
+          const ev = Career.EVENTS.find(e => e.mountainId === mId) || Career.EVENTS[0];
+          startRun(ev.mountainId, ev.modeId, ev.seed, ev.diff, ev, false, false);
+        }
       },
       togglePause() {
         if (state === 'race') {
@@ -493,9 +502,9 @@ const App = (() => {
         enterPhotoMode();
       },
       restartRun() {
-        if (activeEndless) startRun(activeEndless.mountainId, 'endless', activeEndless.seed, activeEndless.diff, null, false);
-        else if (activeEvent) startRun(activeEvent.mountainId, activeEvent.modeId, activeEvent.seed, activeEvent.diff, activeEvent, false);
-        else startRun(MOUNTAINS[0].id, 'freeride', 202611, 0, Career.EVENTS[0], false);
+        if (activeEndless) startRun(activeEndless.mountainId, 'endless', activeEndless.seed, activeEndless.diff, null, false, activeEndless.solo !== false);
+        else if (activeEvent) startRun(activeEvent.mountainId, activeEvent.modeId, activeEvent.seed, activeEvent.diff, activeEvent, false, false);
+        else startRun(MOUNTAINS[0].id, 'freeride', 202611, 0, Career.EVENTS[0], false, false);
       },
       finishEndlessNow() {
         if (state === 'race' && Course.mode.endless) finalizeRun();
@@ -511,10 +520,10 @@ const App = (() => {
     const hash = (location.hash || '').slice(1);
     if (hash === 'today') {
       const sd = todaySeed();
-      startRun(MOUNTAINS[sd % MOUNTAINS.length].id, 'endless', sd, 1.5, null, false);
+      startRun(MOUNTAINS[sd % MOUNTAINS.length].id, 'endless', sd, 1.5, null, false, true);
     } else if (/^seed-(\d+)$/.test(hash)) {
       const sd = +RegExp.$1;
-      startRun(MOUNTAINS[sd % MOUNTAINS.length].id, 'endless', sd, 1.2, null, false);
+      startRun(MOUNTAINS[sd % MOUNTAINS.length].id, 'endless', sd, 1.2, null, false, true);
     } else {
       UI.setScreen('title');
     }
@@ -549,8 +558,11 @@ const App = (() => {
       setScreen: s => UI.setScreen(s),
       openSub: sub => UI.openSub(sub),
       riderVerts: () => (RiderMesh.info() ? RiderMesh.info().nv : 0),
-      startEvent: idx => { const ev = Career.EVENTS[idx] || Career.EVENTS[0]; startRun(ev.mountainId, ev.modeId, ev.seed, ev.diff, ev, false); },
-      startEndless: (mId = 'redrock', seed = 202611) => startRun(mId, 'endless', seed, 1.2, null, false),
+      startEvent: idx => { const ev = Career.EVENTS[idx] || Career.EVENTS[0]; startRun(ev.mountainId, ev.modeId, ev.seed, ev.diff, ev, false, false); },
+      startEndless: (mId = 'redrock', seed = 202611, solo = true) => startRun(mId, 'endless', seed, 1.2, null, false, solo),
+      quality: () => quality,
+      setQuality: q => { quality = q; Post.setQuality(q); },
+      wildlifeCount: () => Wildlife.count(),
       finishNow: () => finalizeRun(),
       career: () => Career.data,
       state: () => player ? ({
@@ -559,10 +571,11 @@ const App = (() => {
         crashed: player.crashed, air: player.air, trick: player.trickType,
         adrenaline: +player.adrenaline.toFixed(0), view: Camera.currentView().id,
         minCamClear: +Camera.minClearance.toFixed(2),
+        rivalsCount: rivals.length,
         rivals: rivals.map(r => ({ name: r.name, s: Math.round(r.s), rank: r.rank, nemesis: r.nemesis })),
       }) : null,
       sim(secs, fn, opts = {}) {
-        Input.setScript(fn || (() => AI.decideInput(player, rivals[0], allRiders, 1 / 60, raceTime)));
+        Input.setScript(fn || (() => AI.decideInput(player, rivals[0] || player, allRiders, 1 / 60, raceTime)));
         const n = Math.round(secs * 60);
         for (let i = 0; i < n; i++) {
           if (state !== 'race') break;

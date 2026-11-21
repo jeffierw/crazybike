@@ -1,117 +1,152 @@
-// ---------------------------------------------------------------- 18b_music: title-to-race seamless adaptive downhill score
-// Plays an atmospheric filtered start-gate pulse on the Title Screen, then sweeps wide open into full punk-electro downhill drive on launch!
+// ---------------------------------------------------------------- 18b_music: V3 immersive warm Lo-Fi downhill score (Rhodes 9th chords, swung brushed boom-bap drums, warm sub-bass & vinyl warmth)
 const Music = (() => {
-  let ac = null, bus = null, busFilter = null, noiseBuf = null;
+  let ac = null, bus = null, busFilter = null, noiseBuf = null, pinkBuf = null;
   let mode = 'title'; // 'title' | 'race' | 'pause' | 'off'
   let stepIdx = 0, acc = 0;
 
-  // Driving downhill punk/electro riffs (MIDI notes) per mountain biome
-  const RIFFS = [
-    [40, 40, 43, 40, 45, 45, 43, 42, 40, 40, 47, 45, 43, 43, 42, 38], // Red Rock E minor rock
-    [45, 45, 48, 45, 50, 50, 48, 47, 45, 45, 52, 50, 48, 47, 45, 43], // Pine Forest A minor
-    [38, 38, 38, 41, 44, 44, 43, 41, 38, 38, 45, 44, 41, 40, 38, 37], // Volcano D Phrygian heavy
-    [43, 43, 46, 48, 50, 50, 48, 46, 43, 43, 53, 50, 48, 46, 45, 43], // Town G coastal breakbeat
+  // 4-bar warm jazz/lo-fi chord progressions (MIDI notes) unique per biome!
+  const PROGS = [
+    // 0: Red Rock Canyon (golden sunset Em9 -> Cmaj9 -> Am9 -> Bm7)
+    [[52, 55, 59, 62, 66], [48, 52, 55, 59, 62], [45, 48, 52, 55, 59], [47, 50, 54, 57, 61]],
+    // 1: Pine Forest (misty alpine Am9 -> Fmaj9 -> Dm9 -> Em7)
+    [[45, 48, 52, 55, 59], [53, 57, 60, 64, 67], [50, 53, 57, 60, 64], [52, 55, 59, 62, 67]],
+    // 2: Volcanic Ridge (deep moody Dm9 -> Bbmaj7 -> Gm9 -> A7sus4)
+    [[50, 53, 57, 60, 64], [46, 50, 53, 57, 60], [43, 46, 50, 53, 57], [45, 50, 52, 55, 62]],
+    // 3: Hillside Town (breezy coastal Gmaj9 -> Em9 -> Cmaj9 -> D9sus4)
+    [[55, 59, 62, 66, 69], [52, 55, 59, 62, 66], [48, 52, 55, 59, 62], [50, 55, 57, 60, 64]],
   ];
-  // Warm pad chords for start-gate Title & Pause atmosphere
-  const PADS = [
-    [52, 59, 64, 67], // Em7 (Red Rock golden sunset)
-    [57, 64, 69, 72], // Am7 (Alpine forest air)
-    [50, 57, 62, 65], // Dm7 (Volcanic tension)
-    [55, 62, 67, 71], // Gmaj7 (Coastal town warmth)
-  ];
+
+  // Subtle Rhodes top-line melodic intervals (index into active chord + octave)
+  const PLUCK_PAT = [4, -1, -1, 3, -1, -1, 2, -1, -1, 4, -1, 2, -1, 3, -1, -1];
   const mtof = n => 440 * Math.pow(2, (n - 69) / 12);
 
-  function trigKick(t, gainAmt = 0.34) {
-    const o = ac.createOscillator(), g = ac.createGain();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(145, t);
-    o.frequency.exponentialRampToValueAtTime(38, t + 0.11);
-    g.gain.setValueAtTime(gainAmt, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-    o.connect(g); g.connect(busFilter);
-    o.start(t); o.stop(t + 0.16);
-  }
-
-  function trigSnare(t, energy) {
-    const o = ac.createOscillator(), g = ac.createGain();
-    o.type = 'triangle';
-    o.frequency.setValueAtTime(215, t);
-    o.frequency.exponentialRampToValueAtTime(92, t + 0.08);
-    g.gain.setValueAtTime(0.15 * energy, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.10);
-    o.connect(g); g.connect(busFilter);
-    o.start(t); o.stop(t + 0.11);
-
-    if (noiseBuf) {
-      const s = ac.createBufferSource(); s.buffer = noiseBuf;
-      const f = ac.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 1800;
-      const ng = ac.createGain();
-      ng.gain.setValueAtTime(0.14 * energy, t);
-      ng.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
-      s.connect(f); f.connect(ng); ng.connect(busFilter);
-      s.start(t, Math.random(), 0.11);
-    }
-  }
-
-  function trigHat(t, amp) {
-    if (!noiseBuf) return;
-    const s = ac.createBufferSource(); s.buffer = noiseBuf;
-    const f = ac.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 6500;
-    const g = ac.createGain();
-    g.gain.setValueAtTime(amp, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.038);
-    s.connect(f); f.connect(g); g.connect(busFilter);
-    s.start(t, Math.random(), 0.045);
-  }
-
-  function trigBass(t, note, energy, dur = 0.14) {
+  function trigKick(t, gainAmt = 0.28) {
     const o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
-    o.type = 'sawtooth';
-    o.frequency.setValueAtTime(mtof(note), t);
+    o.type = 'sine';
+    o.frequency.setValueAtTime(106, t);
+    o.frequency.exponentialRampToValueAtTime(41, t + 0.13);
     f.type = 'lowpass';
-    f.frequency.setValueAtTime(360 + energy * 1050, t);
-    f.frequency.exponentialRampToValueAtTime(210, t + dur);
-    g.gain.setValueAtTime(0.14 * (0.55 + 0.45 * energy), t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dur + 0.01);
+    f.frequency.value = 230;
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(gainAmt, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
     o.connect(f); f.connect(g); g.connect(busFilter);
-    o.start(t); o.stop(t + dur + 0.02);
+    o.start(t); o.stop(t + 0.24);
   }
 
-  function trigPad(t, chord, dur = 1.8) {
-    for (let i = 0; i < chord.length; i++) {
-      const o = ac.createOscillator(), g = ac.createGain();
-      o.type = i % 2 === 0 ? 'triangle' : 'sine';
-      o.frequency.setValueAtTime(mtof(chord[i]), t);
-      g.gain.setValueAtTime(0.001, t);
-      g.gain.linearRampToValueAtTime(0.042, t + 0.28);
-      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      o.connect(g); g.connect(busFilter);
-      o.start(t); o.stop(t + dur + 0.04);
+  // Dusty lo-fi brushed snare & woody rim click
+  function trigBrushSnare(t, vel = 0.12) {
+    const rim = ac.createOscillator(), rg = ac.createGain();
+    rim.type = 'triangle';
+    rim.frequency.setValueAtTime(340 + (Math.random() - 0.5) * 18, t);
+    rim.frequency.exponentialRampToValueAtTime(155, t + 0.045);
+    rg.gain.setValueAtTime(vel * 0.52, t);
+    rg.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    rim.connect(rg); rg.connect(busFilter);
+    rim.start(t); rim.stop(t + 0.07);
+
+    if (pinkBuf || noiseBuf) {
+      const s = ac.createBufferSource(); s.buffer = pinkBuf || noiseBuf;
+      const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1650; f.Q.value = 0.9;
+      const ng = ac.createGain();
+      ng.gain.setValueAtTime(0.001, t);
+      ng.gain.linearRampToValueAtTime(vel, t + 0.006);
+      ng.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+      s.connect(f); f.connect(ng); ng.connect(busFilter);
+      s.start(t, Math.random(), 0.15);
     }
   }
 
-  function trigLead(t, note) {
-    const o = ac.createOscillator(), g = ac.createGain();
-    o.type = 'square';
-    o.frequency.setValueAtTime(mtof(note + 24), t);
-    g.gain.setValueAtTime(0.042, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-    o.connect(g); g.connect(busFilter);
-    o.start(t); o.stop(t + 0.13);
+  // Feathery swung shaker / brushed closed hi-hat
+  function trigShaker(t, amp = 0.024) {
+    if (!pinkBuf && !noiseBuf) return;
+    const s = ac.createBufferSource(); s.buffer = pinkBuf || noiseBuf;
+    const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 4600; f.Q.value = 1.6;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(amp, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.048);
+    s.connect(f); f.connect(g); g.connect(busFilter);
+    s.start(t, Math.random(), 0.055);
+  }
+
+  // Subtle organic vinyl crackle pop
+  function trigVinylDust(t) {
+    if (!noiseBuf || Math.random() > 0.28) return;
+    const s = ac.createBufferSource(); s.buffer = noiseBuf;
+    const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 2800 + Math.random() * 2400; f.Q.value = 2.4;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.010 + Math.random() * 0.010, t);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + 0.012);
+    s.connect(f); f.connect(g); g.connect(busFilter);
+    s.start(t, Math.random(), 0.018);
+  }
+
+  // Round warm upright / sub bass (pure low-passed sine + gentle triangle warmth)
+  function trigSubBass(t, note, dur = 0.55, amp = 0.14) {
+    const o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(mtof(note - 12), t);
+    f.type = 'lowpass';
+    f.frequency.value = 260;
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(amp, t + 0.022);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(f); f.connect(g); g.connect(busFilter);
+    o.start(t); o.stop(t + dur + 0.03);
+  }
+
+  // Vintage warm Rhodes electric-piano chord (gently rolled notes + tiny tape detune warmth!)
+  function trigRhodes(t, chord, dur = 2.2, amp = 0.055) {
+    for (let i = 0; i < chord.length; i++) {
+      const st = t + i * 0.022; // soft human chord roll
+      const drift = 1 + (Math.random() - 0.5) * 0.005; // analog tape warble warmth
+      const freq = mtof(chord[i]) * drift;
+      const o1 = ac.createOscillator(), o2 = ac.createOscillator();
+      const lp = ac.createBiquadFilter(), g = ac.createGain(), g2 = ac.createGain();
+      o1.type = 'sine'; o1.frequency.setValueAtTime(freq, st);
+      o2.type = 'triangle'; o2.frequency.setValueAtTime(freq * 2.0, st); // soft Rhodes tine overtone
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(1650, st);
+      lp.frequency.exponentialRampToValueAtTime(620, st + dur * 0.85);
+      g.gain.setValueAtTime(0.001, st);
+      g.gain.linearRampToValueAtTime(amp, st + 0.025);
+      g.gain.exponentialRampToValueAtTime(0.001, st + dur);
+      g2.gain.setValueAtTime(amp * 0.16, st);
+      g2.gain.exponentialRampToValueAtTime(0.0005, st + 0.24);
+      o1.connect(lp); o2.connect(g2); g2.connect(lp);
+      lp.connect(g); g.connect(busFilter);
+      o1.start(st); o1.stop(st + dur + 0.05);
+      o2.start(st); o2.stop(st + 0.28);
+    }
+  }
+
+  // Gentle muted Rhodes / warm electric guitar top-note accent
+  function trigPluck(t, note, amp = 0.034) {
+    const freq = mtof(note + 12) * (1 + (Math.random() - 0.5) * 0.004);
+    const o = ac.createOscillator(), lp = ac.createBiquadFilter(), g = ac.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(freq, t);
+    lp.type = 'lowpass'; lp.frequency.value = 1400;
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(amp, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.52);
+    o.connect(lp); lp.connect(g); g.connect(busFilter);
+    o.start(t); o.stop(t + 0.55);
   }
 
   function applyModeFilter() {
     if (!ac || !busFilter || !bus) return;
     const now = ac.currentTime;
     if (mode === 'race') {
-      busFilter.frequency.setTargetAtTime(14000, now, 0.18);
-      bus.gain.setTargetAtTime(0.46, now, 0.16);
+      busFilter.frequency.setTargetAtTime(2400, now, 0.24);
+      bus.gain.setTargetAtTime(0.46, now, 0.22);
     } else if (mode === 'title') {
-      busFilter.frequency.setTargetAtTime(860, now, 0.25);
-      bus.gain.setTargetAtTime(0.36, now, 0.25);
+      busFilter.frequency.setTargetAtTime(1150, now, 0.30);
+      bus.gain.setTargetAtTime(0.38, now, 0.28);
     } else if (mode === 'pause') {
-      busFilter.frequency.setTargetAtTime(520, now, 0.20);
-      bus.gain.setTargetAtTime(0.24, now, 0.20);
+      busFilter.frequency.setTargetAtTime(620, now, 0.22);
+      bus.gain.setTargetAtTime(0.24, now, 0.22);
     } else {
       bus.gain.setTargetAtTime(0.0, now, 0.18);
     }
@@ -121,12 +156,13 @@ const Music = (() => {
     init(audioCtx, outBus, mat) {
       ac = audioCtx;
       noiseBuf = mat ? mat.white : null;
+      pinkBuf = mat ? mat.pink : null;
       busFilter = ac.createBiquadFilter();
       busFilter.type = 'lowpass';
-      busFilter.frequency.value = 900;
-      busFilter.Q.value = 0.8;
+      busFilter.frequency.value = 1150;
+      busFilter.Q.value = 0.65;
       bus = ac.createGain();
-      bus.gain.value = 0.36;
+      bus.gain.value = 0.38;
       busFilter.connect(bus);
       bus.connect(outBus);
       applyModeFilter();
@@ -138,7 +174,6 @@ const Music = (() => {
       applyModeFilter();
     },
 
-    // Backwards-compatible helper
     setPlaying(on) {
       Music.setMode(on ? 'race' : 'pause');
     },
@@ -150,32 +185,52 @@ const Music = (() => {
       if (ac.state !== 'running') return;
 
       const isRace = mode === 'race';
-      const energy = isRace ? sat(0.42 + speedNorm * 0.42 + adrenalineNorm * 0.34) : 0.25;
-      const bpm = isRace ? (136 + speedNorm * 18) : 104;
-      const stepDur = 60 / bpm / 4; // 16th note
+      // Relaxed, immersive Lo-Fi tempo (84 BPM on Title/Pause, gently flowing 92..98 BPM while shredding downhill!)
+      const bpm = isRace ? (91 + speedNorm * 7) : 84;
+      const baseStep = 60 / bpm / 4; // 16th note
+      // Subtle classic hip-hop swing on odd 16ths!
+      const sNow = stepIdx & 15;
+      const stepDur = baseStep * ((sNow & 1) ? 1.16 : 0.84);
 
       acc += dt;
       if (acc >= stepDur) {
         acc -= stepDur;
         if (acc > stepDur * 2) acc = 0;
-        const t = ac.currentTime + 0.012;
+        const t = ac.currentTime + 0.015;
         const s = stepIdx & 15;
-        const bi = Math.abs(biomeIdx | 0) % RIFFS.length;
-        const riff = RIFFS[bi];
+        const bar = (stepIdx >> 4) & 3;
+        const bi = Math.abs(biomeIdx | 0) % PROGS.length;
+        const chord = PROGS[bi][bar];
+
+        trigVinylDust(t);
+
+        // Lush Rhodes 9th chord every bar (plus gentle syncopated re-voicing on beat 3.5)
+        if (s === 0) trigRhodes(t, chord, baseStep * 15, isRace ? 0.056 : 0.050);
+        else if (s === 10 && isRace) trigRhodes(t, chord.slice(1), baseStep * 6, 0.032);
+
+        // Warm round upright/sub bass on root & fifth
+        if (s === 0) trigSubBass(t, chord[0], baseStep * 7.5, isRace ? 0.16 : 0.12);
+        else if (s === 7 && isRace) trigSubBass(t, chord[0], baseStep * 3.5, 0.11);
+        else if (s === 10) trigSubBass(t, chord[2] - 12, baseStep * 5.0, isRace ? 0.12 : 0.09);
 
         if (isRace) {
-          if (s === 0 || s === 6 || s === 8 || (energy > 0.68 && s === 14)) trigKick(t, 0.34);
-          if (s === 4 || s === 12) trigSnare(t, energy);
-          if (s % 2 === 1) trigHat(t, 0.032 + energy * 0.025);
-          if (s % 2 === 0 || energy > 0.62) trigBass(t, riff[s], energy, 0.14);
-          if (s === 0) trigPad(t, PADS[bi], stepDur * 14);
-          if (energy > 0.70 && (s === 0 || s === 3 || s === 6 || s === 10 || s === 12)) trigLead(t, riff[s]);
+          // Laid-back boom-bap lo-fi drums: cozy head-nodding groove that never gets harsh!
+          if (s === 0 || s === 7 || s === 10) trigKick(t, s === 0 ? 0.30 : 0.22);
+          if (s === 4 || s === 12) trigBrushSnare(t, 0.125 + speedNorm * 0.03);
+          if (s === 15 && speedNorm > 0.35) trigBrushSnare(t, 0.052); // soft ghost brush
+          if (s % 2 === 0) trigShaker(t, (s % 4 === 2) ? 0.028 : 0.018);
+          else if (speedNorm > 0.45 && (s === 3 || s === 11)) trigShaker(t, 0.014);
+
+          // Gentle warm Rhodes melodic top-line sprinkles during flow
+          const pi = PLUCK_PAT[s];
+          if (pi >= 0 && (speedNorm > 0.25 || adrenalineNorm > 0.2)) {
+            trigPluck(t, chord[pi % chord.length], 0.028 + adrenalineNorm * 0.016);
+          }
         } else {
-          // Atmospheric Title / Pause start-gate groove: warm chord pad + deep subtle heartbeat pulse!
-          if (s === 0) trigPad(t, PADS[bi], stepDur * 15);
-          if (s === 0 || s === 8) trigKick(t, 0.18);
-          if (s % 4 === 0 || s === 14) trigBass(t, riff[s], 0.22, 0.22);
-          if (s % 4 === 2) trigHat(t, 0.024);
+          // Dreamy Start-Gate / Pause lo-fi chill loop (velvet chords + soft heartbeat kick + brush shaker)
+          if (s === 0 || s === 10) trigKick(t, 0.16);
+          if (s === 4 || s === 12) trigBrushSnare(t, 0.068);
+          if (s % 4 === 2) trigShaker(t, 0.016);
         }
         stepIdx++;
       }

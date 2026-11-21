@@ -314,19 +314,36 @@ const Sound = (() => {
     s.start(now, Math.random(), 0.16);
   }
 
-  function playTrick(combo = 1) {
+  function playTrick(stage = 1) {
     if (!ctx || !sfxBus || muted) return;
     const now = ctx.currentTime;
-    const base = 440 * Math.pow(1.12246, Math.min(12, combo * 2));
-    // Sparkling ribbon chime + airy sweep!
-    [1, 1.25, 1.5, 2.0].forEach((mul, idx) => {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = idx === 3 ? 'sine' : 'triangle';
-      o.frequency.setValueAtTime(base * mul, now + idx * 0.038);
-      g.gain.setValueAtTime(idx === 3 ? 0.08 : 0.14, now + idx * 0.038);
-      g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.038 + 0.26);
-      o.connect(g); g.connect(sfxBus);
-      o.start(now + idx * 0.038); o.stop(now + idx * 0.038 + 0.28);
+    // 1. Organic wet ink-brush / airy whip whoosh (zero retro electronic arpeggio beeps!)
+    if (M && M.pink) {
+      const s = ctx.createBufferSource(); s.buffer = M.pink;
+      const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.4;
+      f.frequency.setValueAtTime(stage > 1 ? 520 : 380, now);
+      f.frequency.exponentialRampToValueAtTime(stage > 1 ? 1480 : 1120, now + 0.11);
+      f.frequency.exponentialRampToValueAtTime(420, now + 0.28);
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.001, now);
+      ng.gain.linearRampToValueAtTime(stage > 1 ? 0.24 : 0.20, now + 0.03);
+      ng.gain.exponentialRampToValueAtTime(0.001, now + 0.30);
+      s.connect(f); f.connect(ng); ng.connect(sfxBus);
+      s.start(now, Math.random(), 0.32);
+    }
+    // 2. Subtle warm muted Rhodes harmonic swell matching the lo-fi vibe!
+    const notes = stage > 1 ? [329.63, 440.0, 493.88] : [293.66, 369.99];
+    notes.forEach((freq, idx) => {
+      const st = now + idx * 0.025;
+      const o = ctx.createOscillator(), lp = ctx.createBiquadFilter(), g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, st);
+      lp.type = 'lowpass'; lp.frequency.value = 1100;
+      g.gain.setValueAtTime(0.001, st);
+      g.gain.linearRampToValueAtTime(stage > 1 ? 0.075 : 0.055, st + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, st + 0.42);
+      o.connect(lp); lp.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st + 0.45);
     });
   }
 

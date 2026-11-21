@@ -8,6 +8,7 @@ const UI = (() => {
   let screen = 'title'; // 'title' | 'career' | 'endless' | 'garage' | 'race' | 'pause' | 'result'
   let subMenu = 'main'; // 'main' | 'views' | 'settings' | 'controls'
   let selMountainIdx = 0;
+  let endlessSolo = true; // V3 default: solo endless freeride (0 AI rivals), toggleable!
   let lastResult = null;
   let actions = null;
 
@@ -144,8 +145,8 @@ const UI = (() => {
         ['Space', 'Hold Charge → Release Jump'],
         ['Shift', 'Adrenaline Overdrive'],
         ['Q / E  or  J / K', 'Left / Right Punch, Kick & Bottle'],
-        ['Mid-Air WASD / Space', '8 Ribbon Air Tricks (Auto-Land!)'],
-        ['Mid-Air S (Hold)', '360° Backflip (Release to Land)'],
+        ['Mid-Air WASD / Space', 'Random Ink-Brush Trick (Complete & Auto-Land!)'],
+        ['Mid-Air S (Big Drop)', '360° Backflip Off Mega Cliffs'],
         ['V / Shift+V / 1–8', 'Switch 8 Camera Views'],
         ['Drag / Right-Drag', '360° Orbit & Look Around'],
         ['Esc / P', 'Pause Menu / Photo Mode'],
@@ -156,8 +157,8 @@ const UI = (() => {
         ['Space 空格', '按住蓄力 · 松开飞跃'],
         ['Shift', '肾上腺素暴走加速'],
         ['Q / E 或 J / K', '左右挥拳 / 飞踹 / 砸水壶 / 球棒'],
-        ['空中 WASD / 空格', '8 种彩带花式特技（自动护航落地）'],
-        ['空中按住 S', '极限后空翻（落地前摆正）'],
+        ['空中 WASD / 空格', '随机完整喷墨特技（落地自动稳住）'],
+        ['悬崖大跳按 S', '极限 360° 后空翻'],
         ['V / Shift+V / 1–8', '切换 8 种镜头机位'],
         ['拖拽 / 右键拖拽', '360° 环视山脉与车手'],
         ['Esc / P', '暂停菜单 / 定格拍照'],
@@ -246,17 +247,26 @@ const UI = (() => {
 
           <button id="btn-go" class="go-btn">${t('出发')}</button>
 
-          <div style="margin-top:26px;">
+          <div style="margin-top:16px;">
+            <div class="rail-label" style="margin-bottom:7px;">${bi('一键切换山脉', 'QUICK MOUNTAIN')}</div>
+            <div class="pill-row">
+              ${MOUNTAINS.map((mt, idx) => `
+                <button class="pill ${curM.id === mt.id ? 'on' : ''}" data-quickm="${idx}">${mName(mt)}</button>
+              `).join('')}
+            </div>
+          </div>
+
+          <div style="margin-top:18px;">
             <button id="t-career" class="rail-item"><span>${t('生涯巡回')}</span><small>4 ${bi('大山 · 12 赛事', 'MOUNTAINS · 12 RACES')}</small></button>
-            <button id="t-endless" class="rail-item"><span>${t('无尽暴走')}</span><small>#TODAY · AI</small></button>
+            <button id="t-endless" class="rail-item"><span>${t('无尽暴走')}</span><small>#TODAY · ${endlessSolo ? 'SOLO' : 'AI'}</small></button>
             <button id="t-garage" class="rail-item"><span>${t('改装车库')}</span><small>$${c.cash}</small></button>
             <button id="t-views" class="rail-item"><span>${t('视角')}</span><small>${viewName(Camera.currentView())}</small></button>
-            <button id="t-settings" class="rail-item"><span>${t('设置')}</span><small>${mName(curM)} · ${I18N.lang.toUpperCase()}</small></button>
+            <button id="t-settings" class="rail-item"><span>${t('设置')}</span><small>${bi(actions.getQuality ? actions.getQuality().toUpperCase() : 'AUTO', actions.getQuality ? actions.getQuality().toUpperCase() : 'AUTO')} · ${I18N.lang.toUpperCase()}</small></button>
             <button id="t-controls" class="rail-item"><span>${t('操作说明')}</span><small>WASD / PAD</small></button>
           </div>
         </div>
 
-        <div style="margin-top:20px;font-size:11px;color:var(--faint);letter-spacing:0.12em;line-height:1.6;">
+        <div style="margin-top:16px;font-size:11px;color:var(--faint);letter-spacing:0.12em;line-height:1.6;">
           ${t('全代码实时生成 · 4座险峰 · 8人速降混战')}<br/>
           <span style="opacity:0.65;">Build ${BUILD_HASH}</span>
         </div>
@@ -265,6 +275,14 @@ const UI = (() => {
     `;
 
     bindCornerTools();
+    root().querySelectorAll('[data-quickm]').forEach(b => {
+      b.onclick = () => {
+        Sound.unlock();
+        selMountainIdx = +b.dataset.quickm;
+        actions.previewMountain(MOUNTAINS[selMountainIdx].id);
+        renderTitle();
+      };
+    });
     document.getElementById('btn-go').onclick = () => {
       Sound.unlock();
       // Launch immediately on currently selected mountain!
@@ -374,12 +392,18 @@ const UI = (() => {
           <div style="display:flex;align-items:center;gap:14px;">
             <button id="btn-back" class="e-btn">← ${t('返回')}</button>
             <div>
-              <div style="font-family:var(--f-lat);font-size:10px;letter-spacing:0.32em;color:var(--sun);">ENDLESS DOWNHILL · AI RIVALS</div>
+              <div style="font-family:var(--f-lat);font-size:10px;letter-spacing:0.32em;color:var(--sun);">ENDLESS DOWNHILL · ${endlessSolo ? 'SOLO FREERIDE' : 'AI RIVALS'}</div>
               <div style="font-family:var(--f-song);font-size:24px;letter-spacing:0.20em;">${t('无尽暴走')}</div>
             </div>
           </div>
-          <div class="e-btn" style="cursor:default;color:var(--sun);">
-            ${bi(`最远 ${c.endlessBest.dist}m · 最高 ${c.endlessBest.takedowns} K.O.`, `Best ${c.endlessBest.dist}m · ${c.endlessBest.takedowns} K.O.`)}
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <div class="pill-row">
+              <button id="end-solo-on" class="pill ${endlessSolo ? 'on' : ''}">🏔 ${bi('单人独享（默认）', 'Solo Freeride')}</button>
+              <button id="end-solo-off" class="pill ${!endlessSolo ? 'on' : ''}">⚔ ${bi('加入 AI 对手', 'With AI Rivals')}</button>
+            </div>
+            <div class="e-btn" style="cursor:default;color:var(--sun);">
+              ${bi(`最远 ${c.endlessBest.dist}m · 最高 ${c.endlessBest.takedowns} K.O.`, `Best ${c.endlessBest.dist}m · ${c.endlessBest.takedowns} K.O.`)}
+            </div>
           </div>
         </div>
 
@@ -387,7 +411,9 @@ const UI = (() => {
           <div>
             <div style="font-family:var(--f-song);font-size:20px;color:var(--sun);letter-spacing:0.14em;">🌄 ${bi('今日之山', "Today's Mountain")} #today (${tSeed})</div>
             <div style="font-size:13px;color:var(--dim);margin-top:5px;">
-              ${bi('全球同种子无限下坡，动态 AI 对手持续在前方刷出，随时可结算高光路线卡！', 'Shared daily seed endless mountain with dynamically recycling AI rivals & route card export.')}
+              ${endlessSolo
+                ? bi('全球同种子纯粹单人无尽下坡，悬崖速降 + 喷墨特技 + 伴随野生动物，随时可结算路线卡！', 'Shared daily seed pure solo endless freeride — mega cliff drops, ink stunts & wildlife, export route card anytime.')
+                : bi('全球同种子无限下坡，动态 AI 对手持续在前方刷出，随时可结算高光路线卡！', 'Shared daily seed endless mountain with dynamically recycling AI rivals & route card export.')}
             </div>
           </div>
           <button id="btn-today" class="go-btn" style="height:44px;min-width:168px;font-size:14px;letter-spacing:0.24em;text-indent:0.24em;">${bi('挑战今日', 'Play Today')}</button>
@@ -407,16 +433,18 @@ const UI = (() => {
       </div>`;
 
     document.getElementById('btn-back').onclick = () => setScreen('title');
+    document.getElementById('end-solo-on').onclick = () => { endlessSolo = true; renderEndless(); };
+    document.getElementById('end-solo-off').onclick = () => { endlessSolo = false; renderEndless(); };
     document.getElementById('btn-today').onclick = () => {
       const mToday = MOUNTAINS[tSeed % MOUNTAINS.length];
       location.hash = 'today';
-      actions.startEndless(mToday.id, tSeed, 1.5);
+      actions.startEndless(mToday.id, tSeed, 1.5, endlessSolo);
     };
     root().querySelectorAll('[data-endm]').forEach(b => {
       b.onclick = () => {
         const sd = curSeed + Math.floor(Math.random() * 999);
         location.hash = 'seed-' + sd;
-        actions.startEndless(b.dataset.endm, sd, 1.2);
+        actions.startEndless(b.dataset.endm, sd, 1.2, endlessSolo);
       };
     });
   }
@@ -583,7 +611,11 @@ const UI = (() => {
         ? `${(player.s / 1000).toFixed(2)}<span style="font-size:15px;color:var(--dim);"> KM</span>`
         : `${player.rank}<span style="font-size:16px;color:var(--dim);">/${totalRiders}</span>`;
     }
-    if (koEl) koEl.textContent = `K.O. ${player.takedowns} · ${t(Combat.TIER_NAMES[player.combatTier])} · 🍼×${player.bottles}`;
+    if (koEl) {
+      koEl.textContent = totalRiders <= 1
+        ? bi('SOLO · 单人无尽畅滑', 'SOLO · FREERIDE FLOW')
+        : `K.O. ${player.takedowns} · ${t(Combat.TIER_NAMES[player.combatTier])} · 🍼×${player.bottles}`;
+    }
     if (progEl) {
       const p = Course.mode.endless ? ((player.s % 1000) / 10) : clamp((player.s / Course.finishS) * 100, 0, 100);
       progEl.style.width = `${p.toFixed(1)}%`;
@@ -600,11 +632,11 @@ const UI = (() => {
       if (player.air && player.trickType && player.trickScore > 18) {
         const tr = Stunts.TRICKS[player.trickType];
         const trName = I18N.lang === 'en' ? tr.en : tr.name;
-        banEl.style.color = player.trickCombo >= 3 ? '#ffd08a' : '#38e2ff';
-        banEl.textContent = `${trName} ×${player.trickCombo}  +${Math.round(player.trickScore)}`;
+        banEl.style.color = '#ffd08a';
+        banEl.textContent = `${trName}  +${Math.round(player.trickScore)}`;
         if (subEl) subEl.textContent = player.trickType === 'backflip'
-          ? bi('后空翻中 · 落地前摆正车身', 'BACKFLIP · LEVEL OUT BEFORE LANDING')
-          : bi('花式连招 · 切换方向叠加彩带倍率', 'SUPER-STYLE · SWITCH DIR TO CHAIN RIBBONS');
+          ? bi('极限后空翻 · 完成翻腾稳稳着陆', 'BACKFLIP · STOMP THE LANDING')
+          : bi('喷墨花式 · 完整动作落地加速', 'INK STYLE · CLEAN STOMP BOOST');
       } else if (bannerT > 0) {
         banEl.style.color = bannerCol;
         banEl.textContent = bannerText;
@@ -616,16 +648,41 @@ const UI = (() => {
     }
   }
 
-  // ---- 6. Translucent Left-Rail Pause Menu (Right 65% Wide Open for 360-Orbit!) ----
+  // ---- 6. Translucent Left-Rail Pause Menu (Right 65% Wide Open for 360-Orbit + 1-Click Mountain & Quality Switch!) ----
   function renderPause() {
     if (subMenu !== 'main') return renderSubRail('pause');
+    const curQual = actions.getQuality ? actions.getQuality() : 'auto';
+    const qualOpts = [
+      ['auto', bi('自动', 'Auto')],
+      ['high', bi('高', 'High')],
+      ['balanced', bi('均衡', 'Balanced')],
+      ['smooth', bi('流畅', 'Smooth')],
+    ];
     root().innerHTML = `
       <div class="scrim-left"></div>
       ${cornerToolsHtml()}
       <div class="rail">
         <div class="rail-kicker">PAUSED · ${mName(Course.mountain)}</div>
         <div class="rail-title">${t('已暂停')}</div>
-        <button id="p-resume" class="go-btn" style="height:46px;min-width:168px;font-size:15px;letter-spacing:0.32em;text-indent:0.32em;margin-bottom:20px;">${t('继续狂飙')}</button>
+        <button id="p-resume" class="go-btn" style="height:46px;min-width:168px;font-size:15px;letter-spacing:0.32em;text-indent:0.32em;margin-bottom:16px;">${t('继续狂飙')}</button>
+
+        <div style="margin-bottom:14px;">
+          <div class="rail-label" style="margin-bottom:6px;">${bi('一键切换山脉', 'SWITCH MOUNTAIN')}</div>
+          <div class="pill-row">
+            ${MOUNTAINS.map(mt => `
+              <button class="pill ${Course.mountain.id === mt.id ? 'on' : ''}" data-swm="${mt.id}">${mName(mt)}</button>
+            `).join('')}
+          </div>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <div class="rail-label" style="margin-bottom:6px;">${t('画质')} · QUALITY</div>
+          <div class="pill-row">
+            ${qualOpts.map(([id, lbl]) => `
+              <button class="pill ${curQual === id ? 'on' : ''}" data-pqual="${id}">${lbl}</button>
+            `).join('')}
+          </div>
+        </div>
 
         <button id="p-photo" class="rail-item"><span>📷 ${t('拍照模式')}</span><small>P</small></button>
         <button id="p-views" class="rail-item"><span>🎥 ${t('视角')}</span><small>${viewName(Camera.currentView())}</small></button>
@@ -639,6 +696,12 @@ const UI = (() => {
     `;
 
     bindCornerTools();
+    root().querySelectorAll('[data-swm]').forEach(b => {
+      b.onclick = () => { Sound.unlock(); if (actions.switchMountainNow) actions.switchMountainNow(b.dataset.swm); };
+    });
+    root().querySelectorAll('[data-pqual]').forEach(b => {
+      b.onclick = () => { if (actions.setQuality) actions.setQuality(b.dataset.pqual); renderPause(); };
+    });
     document.getElementById('p-resume').onclick = () => actions.togglePause();
     document.getElementById('p-photo').onclick = () => actions.enterPhoto();
     document.getElementById('p-views').onclick = () => { subMenu = 'views'; renderPause(); };
