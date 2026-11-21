@@ -10,47 +10,60 @@ const Wildlife = (() => {
   }
 
   function targetCount(quality) {
-    if (quality === 'smooth') return 4;
-    if (quality === 'balanced') return 8;
-    if (quality === 'high') return 16;
-    return 12; // auto
+    if (quality === 'smooth') return 1;
+    if (quality === 'balanced') return 2;
+    if (quality === 'high') return 3;
+    return 2; // auto: sparse occasional 1-2 creatures so world feels natural & uncrowded
   }
 
-  function spawnOne(centerS, idx) {
+  function spawnOne(centerS, idx, centerX = null) {
     const bi = Course.mountain ? Course.mountain.idx : 0;
-    const isBird = (idx % 3 !== 0); // ~67% soaring birds, ~33% running ground wildlife!
-    const s = Math.max(24, centerS + 22 + rnd() * 170);
+    const s = Math.max(36, centerS + 55 + idx * 95 + rnd() * 55);
     const sp = Course.at(s);
     const side = rnd() < 0.5 ? -1 : 1;
+    const anchorX = (centerX !== null && centerX !== undefined) ? centerX : sp.cx;
+
+    // Biome-authentic species matching (Volcano has solitary ravens only — zero mammals on hot lava!)
+    let kind, isBird;
+    if (bi === 2) {
+      kind = 'raven'; isBird = true;
+    } else if (bi === 1) {
+      if (idx === 1) { kind = 'eagle'; isBird = true; }
+      else { kind = 'deer'; isBird = false; }
+    } else if (bi === 3) {
+      if (idx === 1) { kind = 'cat'; isBird = false; }
+      else { kind = 'gull'; isBird = true; }
+    } else {
+      if (idx === 1) { kind = 'bighorn'; isBird = false; }
+      else { kind = 'eagle'; isBird = true; }
+    }
 
     if (isBird) {
-      const orbitR = 14 + rnd() * 24;
-      const alt = 10 + rnd() * 20;
-      const kind = bi === 3 ? 'gull' : bi === 2 ? 'raven' : 'eagle';
+      const orbitR = 20 + rnd() * 26;
+      const alt = kind === 'gull' ? (14 + rnd() * 12) : (22 + rnd() * 16);
+      const cx = anchorX + side * (16 + rnd() * 34);
       return {
         kind,
         isBird: true,
         s,
-        cx: sp.cx + side * (6 + rnd() * 26),
+        cx,
         cz: -s,
         orbitR,
         alt,
         ang: rnd() * TAU,
-        angSpd: (rnd() < 0.5 ? 1 : -1) * (0.34 + rnd() * 0.28),
+        angSpd: (rnd() < 0.5 ? 1 : -1) * (0.28 + rnd() * 0.22),
         flapPh: rnd() * TAU,
-        flapSpd: kind === 'gull' ? 7.5 : 5.4,
-        scale: (kind === 'gull' ? 0.85 : 1.15) + rnd() * 0.35,
-        x: sp.cx, y: sp.baseY + alt, z: -s, yaw: 0, bank: 0,
+        flapSpd: kind === 'gull' ? 7.0 : 4.8,
+        scale: (kind === 'gull' ? 0.85 : 1.15) + rnd() * 0.30,
+        x: cx, y: sp.baseY + alt, z: -s, yaw: 0, bank: 0,
       };
     } else {
-      const kind = bi === 1 ? 'deer' : bi === 3 ? 'cat' : bi === 2 ? 'ibex' : 'bighorn';
-      const uStart = side * (10 + rnd() * 22);
-      // Ground critters trot naturally across the hillside or dash across open slopes ahead!
+      const uStart = side * (16 + rnd() * 24);
       const dir = -side;
       const spd = kind === 'deer' ? 9.5 + rnd() * 4.5
-                : kind === 'cat'  ? 6.0 + rnd() * 3.0
-                : 7.5 + rnd() * 3.5;
-      const x = sp.cx + uStart;
+                : kind === 'cat'  ? 5.8 + rnd() * 2.8
+                : 7.2 + rnd() * 3.2;
+      const x = anchorX + uStart;
       const z = -s;
       const y = Course.height(x, z);
       return {
@@ -58,11 +71,12 @@ const Wildlife = (() => {
         isBird: false,
         s,
         u: uStart,
+        worldX: x,
         dir,
         spd,
-        driftS: (rnd() - 0.35) * 4.2,
+        driftS: (rnd() - 0.35) * 4.0,
         gaitPh: rnd() * TAU,
-        scale: (kind === 'cat' ? 0.55 : kind === 'deer' ? 1.12 : 0.96) + rnd() * 0.18,
+        scale: (kind === 'cat' ? 0.55 : kind === 'deer' ? 1.10 : 0.94) + rnd() * 0.16,
         x, y, z,
         yaw: dir > 0 ? -PI * 0.5 : PI * 0.5,
       };
@@ -75,20 +89,22 @@ const Wildlife = (() => {
     curBiome = Course.mountain ? Course.mountain.idx : 0;
   }
 
-  function step(centerS, dt, quality = 'auto') {
+  function step(centerS, dt, quality = 'auto', centerX = null) {
     const bi = Course.mountain ? Course.mountain.idx : 0;
     if (bi !== curBiome) reset();
     const want = targetCount(quality);
 
     while (critters.length < want) {
-      critters.push(spawnOne(centerS, critters.length));
+      critters.push(spawnOne(centerS, critters.length, centerX));
     }
     if (critters.length > want) critters.length = want;
 
+    const endlessX = Course.mode.endless && centerX !== null && centerX !== undefined;
+
     for (let i = 0; i < critters.length; i++) {
       const c = critters[i];
-      if (c.s < centerS - 24 || c.s > centerS + 235) {
-        critters[i] = spawnOne(centerS, i);
+      if (c.s < centerS - 24 || c.s > centerS + 340) {
+        critters[i] = spawnOne(centerS, i, centerX);
         continue;
       }
 
@@ -105,14 +121,20 @@ const Wildlife = (() => {
         if (Math.hypot(dx, dz) > 0.001) c.yaw = Math.atan2(-dx, -dz);
         c.bank = clamp(-c.angSpd * 0.85, -0.55, 0.55);
       } else {
-        // Ground wildlife dashes actively once rider gets within ~115m, trotting calmly farther out!
         const distAhead = c.s - centerS;
         const alertMul = distAhead < 110 ? 1.0 : 0.35;
-        c.u += c.dir * c.spd * alertMul * dt;
         c.s += c.driftS * alertMul * dt;
-        if (Math.abs(c.u) > 36) c.dir = -c.dir;
-        const sp = Course.at(Math.max(10, c.s));
-        const nx = sp.cx + c.u;
+        let nx;
+        if (endlessX) {
+          c.worldX += c.dir * c.spd * alertMul * dt;
+          if (Math.abs(c.worldX - centerX) > 48) c.dir = -c.dir;
+          nx = c.worldX;
+        } else {
+          c.u += c.dir * c.spd * alertMul * dt;
+          if (Math.abs(c.u) > 36) c.dir = -c.dir;
+          const sp = Course.at(Math.max(10, c.s));
+          nx = sp.cx + c.u;
+        }
         const nz = -c.s;
         const dx = nx - c.x, dz = nz - c.z;
         c.x = nx; c.z = nz;
@@ -232,6 +254,7 @@ const Wildlife = (() => {
     reset,
     step,
     emit,
+    list: () => critters,
     count: () => critters.length,
   };
 })();
