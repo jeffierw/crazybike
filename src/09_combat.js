@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------- 09_combat: melee shove/kick/bat, thrown water bottles, body checks & Nemesis revenge
 const Combat = (() => {
-  const TIER_NAMES = ['推搡 SHOVE', '飞踹 KICK', '水壶 BOTTLE', '球棒 BAT'];
+  const TIER_NAMES = ['推搡', '飞踹', '水壶砸击', '球棒暴击'];
   const projectiles = []; // { x, y, z, vx, vy, vz, owner, target, ttl, spin, kind }
   const combatEvents = [];
 

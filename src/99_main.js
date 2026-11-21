@@ -64,8 +64,9 @@ const App = (() => {
     titleRider.speed = 0;
     titleRider.vel = [0, 0, 0];
     const sp = Course.at(12);
+    titleRider.pos[1] += 0.06;
     titleRider.yaw = Math.atan2(-sp.dcx, 1);
-    titleRider.pitch = -Math.atan(sp.slope) * 0.45;
+    titleRider.pitch = -Math.atan(sp.slope) * 0.90;
 
     titleRivals = AI.spawnPack(1);
     for (let i = 0; i < titleRivals.length; i++) {
@@ -77,9 +78,9 @@ const App = (() => {
       const side = (i % 2 === 0 ? 1 : -1) * (2.2 + Math.floor(i / 2) * 1.7);
       const rsp = Course.at(rs);
       r.s = rs; r.u = side;
-      r.pos = [rsp.cx + side, Course.height(rsp.cx + side, -rs), -rs];
+      r.pos = [rsp.cx + side, Course.height(rsp.cx + side, -rs) + 0.06, -rs];
       r.yaw = Math.atan2(-rsp.dcx, 1);
-      r.pitch = -Math.atan(rsp.slope) * 0.45;
+      r.pitch = -Math.atan(rsp.slope) * 0.90;
     }
     Terrain.reset();
     Terrain.update(12);
@@ -272,7 +273,7 @@ const App = (() => {
 
     for (const se of Stunts.drainEvents()) {
       const lbl = I18N.lang === 'en' ? se.en : se.name;
-      if (se.type === 'trick_land') showBanner(`${lbl} ×${se.combo}  +${se.pts}`, '#ffd08a');
+      if (se.type === 'trick_land') showBanner(`${lbl}  +${se.pts}`, '#ffd08a');
       else if (se.type === 'trick_bail') showBanner(I18N.bi(`后空翻失误！-${se.lost}`, `BACKFLIP BAIL! -${se.lost}`), '#ff3155');
     }
     for (const ce of Combat.drainEvents()) {

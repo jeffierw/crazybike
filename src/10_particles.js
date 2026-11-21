@@ -206,21 +206,23 @@ const Particles = (() => {
             m = m4.mul(m, m4.rotZ(R.roll + (R.trickRoll || 0)));
 
             const pal = INK_PALETTES[Course.mountain.idx % INK_PALETTES.length];
-            const spread = (R.trickType === 'nohander' && R.trickPhase > 0.1) ? 0.48 * R.trickPhase : 0;
-            const pL = m4.tp(m, [-0.46 - spread, 1.18 + spread * 1.1, -0.35]);
-            const pR = m4.tp(m, [ 0.46 + spread, 1.18 + spread * 1.1, -0.35]);
-            const upV = v3.norm(m4.td(m, [0, 1, 0]));
-            const alpha = R.trickActive ? 0.88 : 0.62;
-            const width = R.trickActive ? 0.34 : 0.22;
+            const spread = (R.trickType === 'nohander' && R.trickPhase > 0.1) ? 0.52 * R.trickPhase : 0;
+            const pL = m4.tp(m, [-0.48 - spread, 1.18 + spread * 1.1, -0.35]);
+            const pR = m4.tp(m, [ 0.48 + spread, 1.18 + spread * 1.1, -0.35]);
+            // Broad tilted-horizontal brush axis so painterly ink strokes show full calligraphic width from high downhill chase view!
+            const sideL = v3.norm(m4.td(m, [0.92, 0.38, 0]));
+            const sideR = v3.norm(m4.td(m, [0.92, -0.38, 0]));
+            const alpha = R.trickActive ? 0.90 : 0.62;
+            const width = R.trickActive ? 0.56 : 0.30;
 
-            pushRibbonNode(0, pL, upV, pal[0], alpha, width);
-            pushRibbonNode(1, pR, upV, pal[1], alpha, width);
+            pushRibbonNode(0, pL, sideL, pal[0], alpha, width);
+            pushRibbonNode(1, pR, sideR, pal[1], alpha, width);
 
             // Bold dark sumi-ink accent brush stroke trailing off rear tire during tricks!
             if (R.trickActive) {
-              const pT = m4.tp(m, [0, 0.45, 0.72]);
+              const pT = m4.tp(m, [0, 0.48, 0.72]);
               const sideV = v3.norm(m4.td(m, [1, 0, 0]));
-              pushRibbonNode(2, pT, sideV, pal[2], 0.76, 0.28);
+              pushRibbonNode(2, pT, sideV, pal[2], 0.80, 0.44);
             }
 
             // Physical spray-paint / ink droplets breaking away from the brush strokes!

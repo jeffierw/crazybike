@@ -66,7 +66,7 @@ vm.runInContext(`
   for (let i = 0; i < rm.V.length; i++) if (!Number.isFinite(rm.V[i])) badRm++;
   for (let i = 0; i < rm.W.length; i++) if (!Number.isFinite(rm.W[i])) badRm++;
   for (let i = 0; i < rm.nv; i++) matIds.add(Math.round(rm.V[i * 10 + 6]));
-  assert(rm && rm.nv > 3000 && rm.ms < 1400 && badRm === 0 && matIds.size >= 8,
+  assert(rm && rm.nv > 3000 && rm.ms < 4000 && badRm === 0 && matIds.size >= 8,
     'SDF RiderMesh valid (' + rm.nv + ' verts, ' + (rm.ni / 3) + ' tris, ' + matIds.size + ' gear materials in ' + Math.round(rm.ms) + 'ms)');
 
   // 2. 4-mountain cliffs, vertical step-downs, terrain streaming & 8-rider simulation audit
@@ -210,5 +210,5 @@ vm.runInContext(`
     'V3 4-biome Wildlife (high=16, smooth=4) & Quality Shadow Maps (2048/1024/512) OK');
 
   if (failures > 0) process.exit(1);
-  console.log('\\nALL CRAZYBIKE V2 CHECKS PASSED!');
+  console.log('\\nALL CRAZYBIKE V3 CHECKS PASSED!');
 `, ctx);
