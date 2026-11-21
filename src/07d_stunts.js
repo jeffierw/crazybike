@@ -1,19 +1,19 @@
-// ---------------------------------------------------------------- 07d_stunts: V3 single committed random trick per jump (zero mid-air switching) + forgiving landing
+// ---------------------------------------------------------------- 07d_stunts: V4 airtime-budgeted sequential random trick chaining (complete one before next, zero crash/bail!)
 const Stunts = (() => {
   const TRICKS = {
-    superman:  { name: '超人撒手',   en: 'SUPERMAN',       rate: 560, dur: 0.84 },
-    nohander:  { name: '张臂飞鹰',   en: 'NO-HANDER',      rate: 600, dur: 0.82 },
-    cancan:    { name: '单腿跨杠',   en: 'CAN-CAN',        rate: 540, dur: 0.78 },
-    dblcancan: { name: '双腿甩空',   en: 'DOUBLE CAN-CAN', rate: 680, dur: 0.88 },
-    nacnac:    { name: '回旋摆腿',   en: 'NAC-NAC',        rate: 580, dur: 0.80 },
-    tabletop:  { name: '平躺压车',   en: 'TABLETOP',       rate: 620, dur: 0.84 },
-    whip:      { name: '神龙摆尾',   en: 'TAILWHIP',       rate: 640, dur: 0.86 },
-    backflip:  { name: '极限后空翻', en: 'BACKFLIP',       rate: 820, dur: 0.94 },
-    spin:      { name: '空中360',    en: '360 SPIN',       rate: 680, dur: 0.90 },
+    superman:  { name: '超人撒手',   en: 'SUPERMAN',       rate: 560, dur: 0.68 },
+    nohander:  { name: '张臂飞鹰',   en: 'NO-HANDER',      rate: 600, dur: 0.66 },
+    cancan:    { name: '单腿跨杠',   en: 'CAN-CAN',        rate: 540, dur: 0.62 },
+    dblcancan: { name: '双腿甩空',   en: 'DOUBLE CAN-CAN', rate: 680, dur: 0.72 },
+    nacnac:    { name: '回旋摆腿',   en: 'NAC-NAC',        rate: 580, dur: 0.64 },
+    tabletop:  { name: '平躺压车',   en: 'TABLETOP',       rate: 620, dur: 0.68 },
+    whip:      { name: '神龙摆尾',   en: 'TAILWHIP',       rate: 640, dur: 0.70 },
+    backflip:  { name: '极限后空翻', en: 'BACKFLIP',       rate: 820, dur: 0.84 },
+    spin:      { name: '空中360',    en: '360 SPIN',       rate: 680, dur: 0.78 },
   };
 
-  // Standard random trick pool (every jump commits to ONE complete random trick, never repeats back-to-back!)
-  const STD_POOL = ['superman', 'nohander', 'cancan', 'dblcancan', 'nacnac', 'tabletop', 'whip', 'spin'];
+  const STD_POOL = ['cancan', 'nacnac', 'nohander', 'superman', 'tabletop', 'whip', 'dblcancan', 'spin'];
+  const LAND_BUFFER = 0.28; // clean upright landing margin reserved before touchdown
   const stuntEvents = [];
 
   function wrapAngle(a) {
@@ -25,126 +25,123 @@ const Stunts = (() => {
     return t * t * (3 - 2 * t);
   }
 
-  // Shuffle-bag random picker: genuinely random per jump, guaranteed non-repeating consecutive tricks
-  function pickRandomTrick(R, allowBackflip, preferBackflip) {
-    if (preferBackflip && allowBackflip) {
+  // Exact 2-step ballistic airtime predictor accounting for steep downhill terrain ahead!
+  function estimateAirtime(R) {
+    const G = (typeof Career !== 'undefined' && Career.data && Career.data.cheats && Career.data.cheats.lowGrav) ? 13.3 : 21.5;
+    const gNow = Course.height(R.pos[0], R.pos[2]);
+    const altNow = Math.max(0, R.pos[1] - gNow);
+    const vy = R.vel[1];
+    const t0 = (vy + Math.sqrt(Math.max(0, vy * vy + 2 * G * altNow))) / G;
+    const tp = clamp(t0, 0.25, 3.8);
+    const landY = Course.height(R.pos[0] + R.vel[0] * tp, R.pos[2] + R.vel[2] * tp);
+    const effAlt = Math.max(altNow, R.pos[1] - landY);
+    return (vy + Math.sqrt(Math.max(0, vy * vy + 2 * G * effAlt))) / G;
+  }
+
+  // Pick one non-repeating random trick whose full duration fits cleanly inside maxDur!
+  function pickFittingTrick(R, maxDur, preferBackflip) {
+    if (maxDur < 0.62) return null;
+    if (preferBackflip && maxDur >= TRICKS.backflip.dur && R._lastTrick !== 'backflip') {
       R._lastTrick = 'backflip';
       return 'backflip';
     }
+    const allowFlip = maxDur >= TRICKS.backflip.dur;
     if (!R._trickBag || R._trickBag.length === 0) {
       R._trickBag = STD_POOL.slice();
-      if (allowBackflip) R._trickBag.push('backflip');
-      // Fisher-Yates shuffle
+      if (allowFlip) R._trickBag.push('backflip');
       for (let i = R._trickBag.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        const t = R._trickBag[i];
+        const tmp = R._trickBag[i];
         R._trickBag[i] = R._trickBag[j];
-        R._trickBag[j] = t;
+        R._trickBag[j] = tmp;
       }
-      // Never repeat last jump's trick immediately after reshuffle
       if (R._trickBag.length > 1 && R._trickBag[R._trickBag.length - 1] === R._lastTrick) {
         const tmp = R._trickBag[0];
         R._trickBag[0] = R._trickBag[R._trickBag.length - 1];
         R._trickBag[R._trickBag.length - 1] = tmp;
       }
     }
-    let chosen = R._trickBag.pop();
-    if (chosen === 'backflip' && !allowBackflip) {
-      chosen = R._trickBag.length > 0 ? R._trickBag.pop() : 'superman';
+    for (let k = R._trickBag.length - 1; k >= 0; k--) {
+      const cand = R._trickBag[k];
+      if (cand !== R._lastTrick && TRICKS[cand] && TRICKS[cand].dur <= maxDur) {
+        R._trickBag.splice(k, 1);
+        R._lastTrick = cand;
+        return cand;
+      }
     }
-    R._lastTrick = chosen;
-    return chosen;
+    for (const cand of STD_POOL) {
+      if (cand !== R._lastTrick && TRICKS[cand].dur <= maxDur) {
+        R._lastTrick = cand;
+        return cand;
+      }
+    }
+    return null;
   }
 
   function stepAir(R, inp, dt) {
-    // Brief takeoff grace so normal small bumps don't trigger tricks
-    if (R.airTime < 0.09) {
+    // Brief takeoff grace so small ground bumps don't trigger tricks
+    if (R.airTime < 0.08) {
       R.trickActive = false;
       R.pitch = damp(R.pitch, clamp(R.vel[1] * 0.042, -0.35, 0.45), 8, dt);
       return;
     }
 
-    const gY = Course.height(R.pos[0], R.pos[2]);
-    const alt = R.pos[1] - gY;
-    const nearGround = alt < 2.25 && R.vel[1] < -1.2;
+    const tRemain = estimateAirtime(R);
+    const wantsTrigger = !!(inp.jump || inp.trickDown || inp.trickLeft || inp.trickRight || (inp.trickUp && R.airTime > 0.14));
 
-    // Any directional / jump key triggers ONE committed random trick (no switching mid-air!)
-    const wantsTrigger = !!(inp.jump || inp.trickDown || inp.trickLeft || inp.trickRight || (inp.trickUp && (alt > 1.5 || R.airTime > 0.20)));
-
-    // 1. If we haven't committed a trick yet on this jump and player asks for one (with real clearance)
-    if (!R.trickLocked && !R.trickDone && wantsTrigger && !nearGround && (alt > 1.15 || R.airTime > 0.14)) {
-      const allowFlip = alt > 3.8 || R.vel[1] > 4.2;
-      const chosen = pickRandomTrick(R, allowFlip, !!inp.trickDown && allowFlip);
-      const tr = TRICKS[chosen] || TRICKS.superman;
-      R.trickLocked = true;
-      R.trickDone = false;
-      R.trickType = chosen;
-      R._trickTimer = 0;
-      R._trickDur = tr.dur;
-      R.trickCombo = 1;
-      R.trickActive = true;
-      R.trickHeld = true;
-
-      if (R.isPlayer) {
-        Sound.playTrick(1);
-        stuntEvents.push({
-          type: 'trick_start',
-          rider: R,
-          trick: tr,
-          combo: 1,
-        });
+    // Phase 1: Start Trick #1 if we have enough budgeted airtime (dur + LAND_BUFFER)
+    if (!R.trickLocked && !R.trickDone && wantsTrigger && tRemain >= 0.62 + LAND_BUFFER) {
+      R.trickPlannedMax = Math.max(1, Math.floor((tRemain - LAND_BUFFER) / 0.68));
+      const chosen = pickFittingTrick(R, tRemain - LAND_BUFFER, !!inp.trickDown);
+      if (chosen) {
+        const tr = TRICKS[chosen];
+        R.trickLocked = true;
+        R.trickDone = false;
+        R.trickType = chosen;
+        R._trickTimer = 0;
+        R._trickDur = tr.dur;
+        R.trickCombo = 1;
+        R.trickActive = true;
+        R.trickHeld = true;
+        if (R.isPlayer) {
+          Sound.playTrick(1);
+          stuntEvents.push({ type: 'trick_start', rider: R, trick: tr, combo: 1 });
+        }
       }
     }
 
-    // 2. Execute the ONE committed trick smoothly from start to completion — NEVER switches mid-air!
+    // Phase 2: Complete the CURRENT trick cleanly (ZERO mid-trick switching!) before chaining to next if airtime budget remains!
     if (R.trickLocked && !R.trickDone && R.trickType) {
-      const tr = TRICKS[R.trickType] || TRICKS.superman;
+      const tr = TRICKS[R.trickType] || TRICKS.cancan;
       R._trickTimer = (R._trickTimer || 0) + dt;
       const dur = R._trickDur || tr.dur;
-      const p = sat(R._trickTimer / dur);
+      let p = sat(R._trickTimer / dur);
 
-      // Score & adrenaline accumulate smoothly over the committed trick execution
+      // Safety finish if ground approaches faster than predicted
+      if (tRemain < 0.16 && p > 0.45) p = 1.0;
+
       const skillBonus = 1 + (R.upgrades.combat || 0) * 0.12;
       R.trickScore += tr.rate * skillBonus * dt;
       R.adrenaline = Math.min(100, R.adrenaline + 14 * dt);
 
-      // Smooth attack -> showcase hold -> clean tuck recovery envelope
-      const backflipMid = R.trickType === 'backflip' && p < 0.88;
-      if (nearGround && !backflipMid && p > 0.35) {
-        // Auto-finish cleanly just before touchdown so landing feels awesome and planted!
-        R.trickDone = true;
-      } else if (R.trickType === 'backflip') {
+      if (R.trickType === 'backflip') {
         R.trickPhase = Math.sin(p * PI);
-        R.trickPitch = p * TAU; // exact full 360 loop cleanly back to 0!
-        R.trickYaw = damp(wrapAngle(R.trickYaw), 0, 10, dt);
-        R.trickRoll = damp(R.trickRoll, 0, 10, dt);
-        R.trickActive = p < 0.94;
-        if (p >= 1.0) {
-          R.trickPitch = 0;
-          R.trickDone = true;
-        }
+        R.trickPitch = p >= 1.0 ? 0 : p * TAU;
+        R.trickYaw = damp(wrapAngle(R.trickYaw), 0, 12, dt);
+        R.trickRoll = damp(R.trickRoll, 0, 12, dt);
+        R.trickActive = p < 0.96;
       } else if (R.trickType === 'spin') {
         R.trickPhase = Math.sin(p * PI);
-        R.trickYaw = -p * TAU; // exact crisp 360 spin back to straight!
-        R.trickPitch = damp(wrapAngle(R.trickPitch), 0.08 * R.trickPhase, 10, dt);
-        R.trickRoll = damp(R.trickRoll, 0, 10, dt);
-        R.trickActive = p < 0.94;
-        if (p >= 1.0) {
-          R.trickYaw = 0;
-          R.trickDone = true;
-        }
+        R.trickYaw = p >= 1.0 ? 0 : -p * TAU;
+        R.trickPitch = damp(wrapAngle(R.trickPitch), 0.08 * R.trickPhase, 12, dt);
+        R.trickRoll = damp(R.trickRoll, 0, 12, dt);
+        R.trickActive = p < 0.96;
       } else {
-        // Expressive pose tricks: attack (0..0.22), hold apex (0.22..0.74), smooth return (0.74..1.0)
-        // If still very high off a mega cliff drop and player keeps holding, stretch the apex smoothly without changing tricks!
-        if (p > 0.45 && p < 0.72 && wantsTrigger && alt > 4.2 && R._trickDur < 1.55) {
-          R._trickDur += dt * 0.65;
-        }
-        const p2 = sat(R._trickTimer / R._trickDur);
-        const env = p2 < 0.22 ? sstep(0, 0.22, p2)
-                  : p2 < 0.76 ? 1.0
-                  : 1.0 - sstep(0.76, 1.0, p2);
+        const env = p < 0.20 ? sstep(0, 0.20, p)
+                  : p < 0.78 ? 1.0
+                  : 1.0 - sstep(0.78, 1.0, p);
         R.trickPhase = env;
-        R.trickActive = env > 0.14;
+        R.trickActive = env > 0.12;
 
         if (R.trickType === 'tabletop') {
           R.trickRoll = 1.12 * env;
@@ -163,20 +160,45 @@ const Stunts = (() => {
           R.trickRoll = (R.trickType === 'dblcancan' ? -0.26 : -0.14) * env;
           R.trickYaw = 0;
         } else {
-          // Superman / Nac-Nac
           R.trickPitch = 0.11 * env;
           R.trickRoll = 0;
           R.trickYaw = 0;
         }
+      }
 
-        if (p2 >= 1.0) R.trickDone = true;
+      // When current trick completes 100%, check remaining airtime budget for seamless next trick!
+      if (p >= 1.0) {
+        const budgetAfter = estimateAirtime(R) - LAND_BUFFER;
+        if ((wantsTrigger || budgetAfter > 0.85) && budgetAfter >= 0.62) {
+          const next = pickFittingTrick(R, budgetAfter, !!inp.trickDown);
+          if (next) {
+            const ntr = TRICKS[next];
+            R.trickType = next;
+            R._trickTimer = 0;
+            R._trickDur = ntr.dur;
+            R.trickCombo = Math.min(8, (R.trickCombo || 1) + 1);
+            R.trickActive = true;
+            R.trickPitch = 0;
+            R.trickYaw = 0;
+            R.trickRoll = 0;
+            R.trickPhase = 0;
+            if (R.isPlayer) {
+              Sound.playTrick(R.trickCombo);
+              stuntEvents.push({ type: 'trick_start', rider: R, trick: ntr, combo: R.trickCombo });
+            }
+          } else {
+            R.trickDone = true;
+          }
+        } else {
+          R.trickDone = true;
+        }
       }
     }
 
-    // 3. Once the single committed trick finishes (or if no trick triggered), hold crisp landing stance!
+    // Phase 3: Clean upright landing stance
     if (R.trickDone || !R.trickLocked) {
       R.trickHeld = false;
-      const snap = nearGround ? 24 : 15;
+      const snap = tRemain < 0.35 ? 26 : 16;
       R.trickPhase = damp(R.trickPhase, 0, snap, dt);
       R.trickPitch = damp(wrapAngle(R.trickPitch), 0, snap, dt);
       R.trickYaw = damp(wrapAngle(R.trickYaw), 0, snap, dt);
@@ -188,56 +210,32 @@ const Stunts = (() => {
     R.roll = damp(R.roll, R.steer * 0.22, 6, dt);
   }
 
-  // Forgiving Downhill Domination landing:
-  // ONLY bail if the rider literally lands upside-down on their head mid-Backflip (|pitch| > 118 deg)!
+  // Zero bail/crash on trick landing — EVERY air stunt chain lands cleanly and rewards full combo!
   function onLand(R, impactVy, airDist) {
-    const pitchOff = Math.abs(wrapAngle(R.trickPitch || 0));
-    const upsideDown = R.trickType === 'backflip' && !R.trickDone && pitchOff > 2.05;
-
-    const resetTrick = () => {
-      R.trickType = null;
-      R.trickHeld = false;
-      R.trickActive = false;
-      R.trickLocked = false;
-      R.trickDone = false;
-      R._trickTimer = 0;
-      R.trickPhase = 0;
-      R.trickScore = 0;
-      R.trickCombo = 0;
-      R.trickYaw = R.trickPitch = R.trickRoll = 0;
-    };
-
-    if (upsideDown && R.trickScore > 80) {
-      if (R.isPlayer) {
-        stuntEvents.push({ type: 'trick_bail', rider: R, lost: Math.round(R.trickScore) });
-      }
-      resetTrick();
-      return true;
-    }
-
-    // Clean stomp landing!
+    const combo = Math.max(1, R.trickCombo || 1);
     if (R.trickScore > 35 || airDist > 11) {
+      const mult = 1 + (combo - 1) * 0.35;
       const airBonus = airDist > 11 ? Math.round(airDist * 18) : 0;
-      const pts = Math.round(R.trickScore * 1.15) + airBonus;
+      const pts = Math.round(R.trickScore * mult) + airBonus;
       R.totalTrickScore += pts;
-      const adrGain = clamp(pts / 20, 18, 60);
+      const adrGain = clamp(pts / 20, 18, 65);
       R.adrenaline = Math.min(100, R.adrenaline + adrGain);
 
       if (pts >= 320 && R.combatTier < 3) R.combatTier++;
       if (pts >= 180 && R.bottles < 3) R.bottles++;
       const fx = -Math.sin(R.yaw), fz = -Math.cos(R.yaw);
-      const kick = clamp(pts / 210, 1.8, 5.2);
+      const kick = clamp(pts / 200, 1.8, 5.6);
       R.vel[0] += fx * kick;
       R.vel[2] += fz * kick;
 
       if (R.isPlayer) {
-        Sound.playTrick(2);
+        Sound.playTrick(Math.min(4, combo + 1));
         const tr = R.trickType ? TRICKS[R.trickType] : null;
         stuntEvents.push({
           type: 'trick_land',
           rider: R,
           pts,
-          combo: 1,
+          combo,
           airDist: Math.round(airDist),
           name: tr ? tr.name : '飞跃着陆',
           en: tr ? tr.en : 'BIG AIR',
@@ -245,12 +243,23 @@ const Stunts = (() => {
       }
     }
 
-    resetTrick();
+    R.trickType = null;
+    R.trickHeld = false;
+    R.trickActive = false;
+    R.trickLocked = false;
+    R.trickDone = false;
+    R._trickTimer = 0;
+    R.trickPlannedMax = 0;
+    R.trickPhase = 0;
+    R.trickScore = 0;
+    R.trickCombo = 0;
+    R.trickYaw = R.trickPitch = R.trickRoll = 0;
     return false;
   }
 
   return {
     TRICKS,
+    estimateAirtime,
     stepAir,
     onLand,
     drainEvents() { const out = stuntEvents.slice(); stuntEvents.length = 0; return out; },

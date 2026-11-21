@@ -21,11 +21,12 @@ const Combat = (() => {
 
     Particles.burstImpact(victim.pos, tier >= 3 ? [1.9, 0.38, 0.12] : [1.8, 0.85, 0.22], tier >= 3 ? 24 : 14);
 
-    // Direct knockout if Bat (tier 3), Boost Smash, or victim already wobbling hard!
+    // Direct stagger / dodge-aside knockback (zero ragdoll crash!)
     const instantKO = tier >= 3 || attacker.boosting || victim.wobble > 1.05 || (tier >= 1 && Math.random() < 0.34);
     if (instantKO) {
+      const canCount = victim.staggerCd <= 0;
       Physics.triggerCrash(victim, 'melee_ko', pushX * 0.85, -3, attacker);
-      registerTakedown(attacker, victim);
+      if (canCount) registerTakedown(attacker, victim);
     } else {
       combatEvents.push({ type: 'hit', attacker, victim, tier, side });
       if (attacker.isPlayer || victim.isPlayer) {
@@ -159,12 +160,13 @@ const Combat = (() => {
         const d = v3.sub([tx, ty, tz], [p.x, p.y, p.z]);
         const dist = v3.len(d);
         if (dist < 1.55) {
-          // DIRECT HEADSHOT!
+          // DIRECT HEADSHOT STAGGER!
           Particles.burstImpact([p.x, p.y, p.z], [0.22, 0.92, 1.0], 22);
           p.target.lastHitBy = p.owner;
           p.target.lastHitTime = raceTime;
+          const canCount = p.target.staggerCd <= 0;
           Physics.triggerCrash(p.target, 'bottle_ko', (Math.random() - 0.5) * 6, -4, p.owner);
-          registerTakedown(p.owner, p.target);
+          if (canCount) registerTakedown(p.owner, p.target);
           projectiles.splice(i, 1);
           continue;
         }
@@ -204,13 +206,15 @@ const Combat = (() => {
           A.pos[0] -= nx * sep; A.pos[2] -= nz * sep;
           B.pos[0] += nx * sep; B.pos[2] += nz * sep;
 
-          // Adrenaline Overdrive Ramming!
+          // Adrenaline Overdrive Dodge-Shove!
           if (A.boosting && !B.boosting) {
+            const canCount = B.staggerCd <= 0;
             Physics.triggerCrash(B, 'boost_ram', nx * 9, nz * 5, A);
-            registerTakedown(A, B);
+            if (canCount) registerTakedown(A, B);
           } else if (B.boosting && !A.boosting) {
+            const canCount = A.staggerCd <= 0;
             Physics.triggerCrash(A, 'boost_ram', -nx * 9, -nz * 5, B);
-            registerTakedown(B, A);
+            if (canCount) registerTakedown(B, A);
           } else {
             // Side-by-side paint trading!
             A.vel[0] -= nx * 2.8; B.vel[0] += nx * 2.8;

@@ -5,8 +5,22 @@ const Input = (() => {
   const justPressed = { atkL: false, atkR: false, cam: false, pause: false };
   let scriptFn = null;
 
+  const GAME_CODES = new Set([
+    'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyJ', 'KeyK', 'KeyV', 'KeyP',
+    'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight',
+    'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8',
+  ]);
+
+  function isEditableTarget(el) {
+    return !!(el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName || ''));
+  }
+
   function init(canvas) {
     addEventListener('keydown', e => {
+      if (isEditableTarget(e.target)) return;
+      if (GAME_CODES.has(e.code) && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+      }
       if (typeof Photo !== 'undefined' && Photo.on) return;
       if (!keys[e.code]) {
         if (e.code === 'KeyQ' || e.code === 'KeyJ') justPressed.atkL = true;
@@ -15,8 +29,12 @@ const Input = (() => {
         if (e.code === 'Escape') justPressed.pause = true;
       }
       keys[e.code] = true;
-    });
-    addEventListener('keyup', e => { keys[e.code] = false; });
+    }, { capture: true });
+    addEventListener('keypress', e => {
+      if (isEditableTarget(e.target)) return;
+      if (GAME_CODES.has(e.code) && !e.metaKey && !e.altKey) e.preventDefault();
+    }, { capture: true });
+    addEventListener('keyup', e => { keys[e.code] = false; }, { capture: true });
     addEventListener('blur', () => { for (const k in keys) keys[k] = false; touch.steer = 0; touch.dragId = null; });
 
     if (canvas) {

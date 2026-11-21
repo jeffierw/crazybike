@@ -604,6 +604,11 @@ const Course = (() => {
         : (rng() < 0.76 ? 'house' : 'lamp');
       const r = sub === 'house' ? 3.2 * scale : sub === 'spire' ? 2.1 * scale : (sub === 'boulder' || sub === 'basalt') ? 1.48 * scale : 0.78 * scale;
       const h = sub === 'house' ? 6.8 * scale : sub === 'pine' ? 11.4 * scale : sub === 'spire' ? 8.6 * scale : 3.4 * scale;
+      let tooClose = false;
+      for (let j = 0; j < list.length; j++) {
+        if (Math.hypot(list[j].x - x, list[j].z - z) < list[j].r + r + 3.2) { tooClose = true; break; }
+      }
+      if (tooClose) continue;
       list.push({ id: ((bx & 1023) << 12) + bs * 40 + i, s, u, x, y, z, r, h, scale, kind: sub, onTrack: false, colorIdx: Math.floor(rng() * 5) });
     }
     C.obsBuckets.set(key, list);
@@ -651,6 +656,11 @@ const Course = (() => {
         : (rng() < 0.76 ? 'house' : 'lamp');
       const r = sub === 'house' ? 3.2 * scale : sub === 'spire' ? 2.1 * scale : (sub === 'boulder' || sub === 'basalt') ? 1.50 * scale : 0.78 * scale;
       const h = sub === 'house' ? 6.8 * scale : sub === 'pine' ? 11.2 * scale : sub === 'spire' ? 8.6 * scale : 3.4 * scale;
+      let tooClose = false;
+      for (let j = 0; j < list.length; j++) {
+        if (Math.hypot(list[j].x - x, list[j].z - z) < list[j].r + r + 3.4) { tooClose = true; break; }
+      }
+      if (tooClose) continue;
       list.push({ id: bi * 100 + i, s, u, x, y, z, r, h, scale, kind: sub, onTrack: false, colorIdx: Math.floor(rng() * 5) });
     }
 

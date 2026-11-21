@@ -145,8 +145,8 @@ const UI = (() => {
         ['Space', 'Hold Charge → Release Jump'],
         ['Shift', 'Adrenaline Overdrive'],
         ['Q / E  or  J / K', 'Left / Right Punch, Kick & Bottle'],
-        ['Mid-Air WASD / Space', 'Random Ink-Brush Trick (Complete & Auto-Land!)'],
-        ['Mid-Air S (Big Drop)', '360° Backflip Off Mega Cliffs'],
+        ['Mid-Air WASD / Space', 'Sequential Ink-Brush Stunt Chain (Zero Crash!)'],
+        ['Mid-Air S (Tall Cliffs)', '360° Backflip in Chain (Auto-Level Landing)'],
         ['V / Shift+V / 1–8', 'Switch 8 Camera Views'],
         ['Drag / Right-Drag', '360° Orbit & Look Around'],
         ['Esc / P', 'Pause Menu / Photo Mode'],
@@ -157,8 +157,8 @@ const UI = (() => {
         ['Space 空格', '按住蓄力 · 松开飞跃'],
         ['Shift', '肾上腺素暴走加速'],
         ['Q / E 或 J / K', '左右挥拳 / 飞踹 / 砸水壶 / 球棒'],
-        ['空中 WASD / 空格', '随机完整喷墨特技（落地自动稳住）'],
-        ['悬崖大跳按 S', '极限 360° 后空翻'],
+        ['空中 WASD / 空格', '高空连续喷墨特技（做完再接下一个 · 零摔车）'],
+        ['高空断崖按 S', '极限 360° 后空翻（落地自动回正）'],
         ['V / Shift+V / 1–8', '切换 8 种镜头机位'],
         ['拖拽 / 右键拖拽', '360° 环视山脉与车手'],
         ['Esc / P', '暂停菜单 / 定格拍照'],
@@ -632,11 +632,9 @@ const UI = (() => {
       if (player.air && player.trickType && player.trickScore > 18) {
         const tr = Stunts.TRICKS[player.trickType];
         const trName = I18N.lang === 'en' ? tr.en : tr.name;
-        banEl.style.color = '#ffd08a';
-        banEl.textContent = `${trName}  +${Math.round(player.trickScore)}`;
-        if (subEl) subEl.textContent = player.trickType === 'backflip'
-          ? bi('极限后空翻 · 完成翻腾稳稳着陆', 'BACKFLIP · STOMP THE LANDING')
-          : bi('喷墨花式 · 完整动作落地加速', 'INK STYLE · CLEAN STOMP BOOST');
+        banEl.style.color = player.trickCombo >= 2 ? '#ffd08a' : '#ffd08a';
+        banEl.textContent = `${trName}${player.trickCombo >= 2 ? ' ×' + player.trickCombo : ''}  +${Math.round(player.trickScore)}`;
+        if (subEl) subEl.textContent = bi('喷墨连招 · 落地前自动回正零摔车', 'INK CHAIN · AUTO-LEVEL SAFE LANDING');
       } else if (bannerT > 0) {
         banEl.style.color = bannerCol;
         banEl.textContent = bannerText;

@@ -116,6 +116,9 @@ const App = (() => {
     rivals = isSolo ? [] : AI.spawnPack(diff);
     allRiders = [player, ...rivals];
     state = 'race';
+    if (typeof document !== 'undefined' && document.activeElement && document.activeElement.blur) {
+      document.activeElement.blur();
+    }
     Music.setMode('race');
     UI.setScreen('race');
     const mn = I18N.lang === 'en' ? Course.mountain.en : Course.mountain.name;
@@ -253,15 +256,15 @@ const App = (() => {
       else if (ev.type === 'land') {
         Particles.burstLand(ev.rider.pos, clamp(ev.impact / 10, 0.5, 1.5));
         if (ev.rider.isPlayer) { Feel.land(ev.impact); Sound.playLand(ev.impact); }
+      } else if (ev.type === 'dodge') {
+        Particles.burstImpact(ev.pos, [1.5, 0.72, 0.25], 12);
+        if (ev.rider.isPlayer) { Feel.jolt(0.28, 0.24, 0); Feel.nearMiss(ev.rider.wobbleDir || 1); Sound.playWhoosh(); }
       } else if (ev.type === 'crash') {
-        Particles.burstImpact(ev.pos, [1.5, 0.45, 0.15], 24);
-        if (ev.attacker && ev.attacker !== ev.rider && (ev.reason === 'obstacle' || ev.reason === 'cliff')) {
-          Combat.registerTakedown(ev.attacker, ev.rider);
-        }
-        if (ev.rider.isPlayer) { Feel.jolt(0.55, 0.7, 0.05); Feel.slowMo = 0.60; Sound.playCrash(); }
+        Particles.burstImpact(ev.pos, [1.5, 0.45, 0.15], 14);
+        if (ev.rider.isPlayer) { Feel.jolt(0.26, 0.22, 0); Sound.playWhoosh(); }
       } else if (ev.type === 'scrape' && ev.rider.isPlayer) {
-        Particles.burstImpact(ev.pos, [1.4, 0.85, 0.3], 10);
-        Feel.jolt(0.26, 0.22, 0); Sound.playHit(false);
+        Particles.burstImpact(ev.pos, [1.4, 0.85, 0.3], 8);
+        Feel.jolt(0.18, 0.14, 0); Sound.playWhoosh();
       } else if (ev.type === 'nearmiss' && ev.rider.isPlayer) {
         if (Feel.nearMiss(ev.side)) { player.adrenaline = Math.min(100, player.adrenaline + 6); Sound.playWhoosh(); }
       } else if (ev.type === 'finish' && ev.rider.isPlayer) {
@@ -273,8 +276,7 @@ const App = (() => {
 
     for (const se of Stunts.drainEvents()) {
       const lbl = I18N.lang === 'en' ? se.en : se.name;
-      if (se.type === 'trick_land') showBanner(`${lbl}  +${se.pts}`, '#ffd08a');
-      else if (se.type === 'trick_bail') showBanner(I18N.bi(`后空翻失误！-${se.lost}`, `BACKFLIP BAIL! -${se.lost}`), '#ff3155');
+      if (se.type === 'trick_land') showBanner(`${lbl}${se.combo >= 2 ? ' ×' + se.combo : ''}  +${se.pts}`, '#ffd08a');
     }
     for (const ce of Combat.drainEvents()) {
       if (ce.type === 'takedown' && ce.attacker.isPlayer) {
@@ -496,6 +498,9 @@ const App = (() => {
           UI.setScreen('pause');
         } else if (state === 'pause') {
           state = 'race';
+          if (typeof document !== 'undefined' && document.activeElement && document.activeElement.blur) {
+            document.activeElement.blur();
+          }
           Camera.resetOrbit();
           Music.setMode('race');
           UI.setScreen('race');

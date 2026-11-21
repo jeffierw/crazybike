@@ -48,6 +48,7 @@ const Physics = (() => {
       onTrack: true,
       onShortcut: false,
       onRamp: false,
+      inCreek: false,
 
       // Adrenaline, Tricks & Boost (used heavily in Step 5)
       adrenaline: 25,   // 0..100
@@ -76,6 +77,7 @@ const Physics = (() => {
       attackKind: 'punch',
       wobble: 0,
       wobbleDir: 0,
+      staggerCd: 0,
       nemesis: false,
       nemesisTimer: 0,
       lastHitBy: null,
@@ -107,32 +109,20 @@ const Physics = (() => {
     };
   }
 
+  // V4 Dodge-Only Impact Response across ALL modes (ZERO ragdoll crashes / ZERO bike detachment / ZERO forced respawn!)
   function triggerCrash(R, reason, impulseX = 0, impulseZ = 0, attacker = null) {
-    if (R.crashed || R.finished) return;
-    R.crashed = true;
-    R.crashTimer = R.isPlayer ? 1.35 : 1.75;
-    R.crashes++;
-    R.boosting = false;
-    R.trickType = null;
-    R.trickHeld = false;
-    R.trickScore = 0;
-    R.trickCombo = 0;
-    R.trickYaw = R.trickPitch = R.trickRoll = 0;
-    R.adrenaline = Math.max(0, R.adrenaline - 35);
-    R.wobble = 0;
-
-    // Detach rider and bike into independent tumbling trajectories!
-    R.ragPos = [R.pos[0], R.pos[1] + 1.15, R.pos[2]];
-    R.ragVel = [R.vel[0] * 0.72 + impulseX + (Math.random() - 0.5) * 3, Math.max(4.5, Math.abs(R.vel[1]) * 0.4 + 5.2), R.vel[2] * 0.72 + impulseZ];
-    R.ragRot = [R.pitch, R.yaw, R.roll];
-    R.ragAngVel = [6 + Math.random() * 5, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 9];
-
-    R.bikeCrashPos = [R.pos[0], R.pos[1] + 0.45, R.pos[2]];
-    R.bikeCrashVel = [R.vel[0] * 0.55 - impulseX * 0.5 + (Math.random() - 0.5) * 4, 4.2 + Math.random() * 2.5, R.vel[2] * 0.55];
-    R.bikeCrashRot = [R.pitch, R.yaw, R.roll];
-    R.bikeCrashAngVel = [8 + Math.random() * 6, (Math.random() - 0.5) * 10, 7 + Math.random() * 6];
-
-    emit({ type: 'crash', rider: R, reason, attacker: attacker || R.lastHitBy, pos: R.pos.slice() });
+    if (R.finished) return;
+    const side = sign(impulseX) || (R.wobbleDir ? -R.wobbleDir : (Math.random() < 0.5 ? -1 : 1));
+    R.vel[0] += clamp(impulseX || side * 8.0, -11, 11);
+    R.vel[2] *= 0.80;
+    R.wobble = Math.max(R.wobble, 0.58);
+    R.wobbleDir = side;
+    R.roll = clamp(R.roll + side * 0.42, -0.85, 0.85);
+    R.staggerCd = 0.85;
+    if (attacker) {
+      R.lastHitBy = attacker;
+    }
+    emit({ type: 'dodge', rider: R, reason, attacker: attacker || R.lastHitBy, pos: R.pos.slice() });
   }
 
   function respawnRider(R) {
@@ -211,6 +201,7 @@ const Physics = (() => {
     if (R.attackTimer > 0) R.attackTimer = Math.max(0, R.attackTimer - dt);
     if (R.attackCd > 0) R.attackCd = Math.max(0, R.attackCd - dt);
     if (R.bottleCd > 0) R.bottleCd = Math.max(0, R.bottleCd - dt);
+    if (R.staggerCd > 0) R.staggerCd = Math.max(0, R.staggerCd - dt);
     if (R.nemesisTimer > 0) {
       R.nemesisTimer -= dt;
       if (R.nemesisTimer <= 0) R.nemesis = false;
@@ -247,6 +238,7 @@ const Physics = (() => {
     R.onTrack = surf.onTrack;
     R.onShortcut = surf.onShortcut;
     R.onRamp = surf.onRamp;
+    R.inCreek = !!surf.inCreek;
 
     // Wobble decay from melee hits
     if (R.wobble > 0) R.wobble = Math.max(0, R.wobble - dt * 1.45);
@@ -403,14 +395,9 @@ const Physics = (() => {
         const airDist = Math.max(0, -R.pos[2] - R.airStartS);
         if (airDist > R.bestAirDist) R.bestAirDist = airDist;
 
-        // Check greedy mid-air trick crash OR clean stomp landing!
-        let bailCrash = false;
+        // Complete trick stomp cleanly — NEVER crash on landing!
         if (typeof Stunts !== 'undefined' && Stunts.onLand) {
-          bailCrash = Stunts.onLand(R, impactVy, airDist);
-        }
-        if (bailCrash) {
-          triggerCrash(R, 'trick_bail', (Math.random() - 0.5) * 4, 0, null);
-          return;
+          Stunts.onLand(R, impactVy, airDist);
         }
 
         // Suspension absorbs impact & matches downhill terrain slope cleanly (ZERO pogo-bouncing after landing!)
@@ -435,25 +422,29 @@ const Physics = (() => {
     R.suspV += suspF * dt;
     R.susp = clamp(R.susp + R.suspV * dt, -0.07, 0.28);
 
-    // Wide open freeride mountain containment + sheer abyss plunge check
+    // Infinite lateral freedom in Endless Mode; gentle canyon ridge pushback in Career (NEVER crash!)
     R.s = Math.max(0, -R.pos[2]);
     const spNow = Course.at(R.s);
     R.u = R.pos[0] - spNow.cx;
-    const cliffSide = R.u < 0 ? spNow.cliffL : spNow.cliffR;
-    if (cliffSide > 0.35 && Math.abs(R.u) > spNow.hw + 24.0 && R.pos[1] < spNow.baseY - 22.0) {
-      triggerCrash(R, 'cliff', sign(R.u) * 4, 0, R.lastHitBy);
-      return;
-    }
-    const maxU = R.isPlayer ? (spNow.hw + 48) : (spNow.hw + 12);
-    if (Math.abs(R.u) > maxU) {
-      const sgn = sign(R.u);
-      R.pos[0] = spNow.cx + sgn * maxU;
-      R.u = sgn * maxU;
-      if (R.vel[0] * sgn > 0) R.vel[0] *= -0.25;
+    if (!Course.mode.endless || !R.isPlayer) {
+      const cliffSide = R.u < 0 ? spNow.cliffL : spNow.cliffR;
+      if (!Course.mode.endless && cliffSide > 0.35 && Math.abs(R.u) > spNow.hw + 20) {
+        const sgn = sign(R.u);
+        R.vel[0] -= sgn * 18 * dt;
+        R.pos[0] = spNow.cx + sgn * Math.min(Math.abs(R.u), spNow.hw + 24);
+        R.u = R.pos[0] - spNow.cx;
+      }
+      const maxU = R.isPlayer ? (spNow.hw + 48) : (spNow.hw + 14);
+      if (Math.abs(R.u) > maxU) {
+        const sgn = sign(R.u);
+        R.pos[0] = spNow.cx + sgn * maxU;
+        R.u = sgn * maxU;
+        if (R.vel[0] * sgn > 0) R.vel[0] *= -0.25;
+      }
     }
 
-    // Obstacle collisions (trees, boulders, basalt spires, houses, barriers)
-    const obs = Course.obstaclesNear(R.s - 6, R.s + 6);
+    // Obstacle collisions (trees, boulders, basalt spires, houses, barriers): ALWAYS fluid sideways auto-dodge, NEVER pin head-on or crash!
+    const obs = Course.obstaclesNear(R.s - 6, R.s + 6, R.pos[0]);
     for (let i = 0; i < obs.length; i++) {
       const o = obs[i];
       const dx = R.pos[0] - o.x, dz = R.pos[2] - o.z;
@@ -461,23 +452,21 @@ const Physics = (() => {
       const minD = o.r + 0.62;
       if (distSq < minD * minD && R.pos[1] < o.y + o.h) {
         const dist = Math.sqrt(distSq) || 0.01;
-        const nx = dx / dist, nz = dz / dist;
-        // Push out
-        R.pos[0] = o.x + nx * minD;
-        R.pos[2] = o.z + nz * minD;
-        const headOn = -(R.vel[0] * nx + R.vel[2] * nz);
-        const crashSpeed = (11.5 + (R.wobble > 0.2 ? -4.5 : 0)) * st.toughness;
-        if (headOn > crashSpeed && !R.boosting) {
-          const recentAttacker = (raceTime - R.lastHitTime < 3.5) ? R.lastHitBy : null;
-          triggerCrash(R, 'obstacle', nx * 5, nz * 5, recentAttacker);
-          return;
-        } else {
-          // Glancing scrape / boost smash!
-          R.vel[0] = R.vel[0] * 0.72 + nx * 6.5;
-          R.vel[2] = R.vel[2] * 0.72 + nz * 6.5;
-          R.wobble = Math.max(R.wobble, 0.45);
-          emit({ type: 'scrape', rider: R, obs: o, pos: [o.x, o.y + 1, o.z] });
-        }
+        // Prefer steering cleanly around the side back toward open valley rather than bouncing backward uphill
+        const dodgeSide = Math.abs(dx) > 0.35 ? sign(dx) : (-sign(R.u) || (((R.id + i) & 1) ? 1 : -1));
+        const bx = dodgeSide * Math.max(0.84, Math.abs(dx / dist));
+        const bz = Math.min(0.15, dz / dist) * 0.35;
+        const bLen = Math.hypot(bx, bz) || 1;
+        const dnx = bx / bLen, dnz = bz / bLen;
+        R.pos[0] = o.x + dnx * (minD + 0.32);
+        R.pos[2] = Math.min(R.pos[2], o.z + dnz * (minD + 0.32));
+        R.vel[0] = R.vel[0] * 0.35 + dodgeSide * 9.8;
+        R.vel[2] = Math.min(R.vel[2] * 0.90, -14.0);
+        R.yaw = clamp(R.yaw - dodgeSide * 0.16, -1.05, 1.05);
+        R.roll = clamp(R.roll + dodgeSide * 0.36, -0.82, 0.82);
+        R.wobble = Math.max(R.wobble, 0.24);
+        emit({ type: 'scrape', rider: R, obs: o, pos: [o.x, o.y + 1, o.z] });
+        break;
       } else if (R.isPlayer && !R.air && hSpeed > 15 && distSq < (minD + 1.35) * (minD + 1.35) && Math.abs(dz) < 1.2) {
         // Near-miss rush!
         emit({ type: 'nearmiss', rider: R, obs: o, side: sign(o.x - R.pos[0]) || 1 });
