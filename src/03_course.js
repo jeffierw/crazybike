@@ -1,93 +1,93 @@
-// ---------------------------------------------------------------- 03_course: 4-biome downhill mountain generator
-// V2 World: single-sided sheer cliffs (悬崖), vertical rock step-down drops (断面), punchier MTB slopes, berms & shortcut lanes.
+// ---------------------------------------------------------------- 03_course: V3 Open-Mountain Downhill Generator
+// Features: 14m-26m true downhill mega cliff drop-offs (大断崖), wide open rideable freeride faces,
+// braided multi-line organic shortcuts (no single-lane prison!), and dramatic 4-biome topography.
 // Coordinate system: x = right, y = up, -z = downhill (s = -z is downhill distance in metres).
-// Lateral coordinate u = x - cx(s). Physics, AI, terrain mesh and props all read this single truth.
 
 const MOUNTAINS = [
   {
     id: 'redrock', idx: 0, name: '红岩大峡谷', en: 'Red Rock Canyon',
-    tagline: '莫阿布红砂悬崖、垂直断面与巨型飞跃跳台',
-    taglineEn: 'Moab sheer sandstone cliffs, drop-offs & mega kickers',
-    slopeMul: 1.04, widthMul: 1.06, grip: 1.0,
-    sunDir: [0.58, 0.36, -0.73], sunCol: [1.42, 1.04, 0.68], sunInt: 1.58, exposure: 1.02,
-    skyZen: [0.13, 0.34, 0.70], skyHor: [0.96, 0.58, 0.32], groundCol: [0.48, 0.24, 0.14], fogDens: 0.0017,
-    trackCol: [0.58, 0.29, 0.15], bankCol: [0.69, 0.27, 0.13], rockCol: [0.50, 0.18, 0.10], accentCol: [0.88, 0.50, 0.20],
-    dustCol: [0.84, 0.46, 0.24], propKind: 'canyon',
+    tagline: '莫阿布红砂巨型断崖、开放岩台抄近道与峡谷飞跃',
+    taglineEn: 'Moab giant sandstone cliff drops, open rock slabs & shortcuts',
+    slopeMul: 1.12, widthMul: 1.15, grip: 1.02,
+    sunDir: [0.56, 0.34, -0.75], sunCol: [1.46, 1.06, 0.70], sunInt: 1.62, exposure: 1.02,
+    skyZen: [0.12, 0.33, 0.68], skyHor: [0.95, 0.57, 0.31], groundCol: [0.46, 0.23, 0.13], fogDens: 0.00145,
+    trackCol: [0.54, 0.27, 0.14], bankCol: [0.64, 0.25, 0.12], rockCol: [0.44, 0.16, 0.09], accentCol: [0.84, 0.45, 0.19],
+    dustCol: [0.85, 0.48, 0.25], propKind: 'canyon',
     unlockCost: 0,
   },
   {
     id: 'forest', idx: 1, name: '苍翠松林道', en: 'Pine Forest',
-    tagline: '高山断崖脊线、高速弯墙与木桥连跳',
-    taglineEn: 'Alpine ridge drops, banked berms & timber kickers',
-    slopeMul: 1.08, widthMul: 0.94, grip: 0.94,
-    sunDir: [-0.45, 0.44, -0.77], sunCol: [1.28, 1.20, 0.94], sunInt: 1.48, exposure: 0.99,
-    skyZen: [0.15, 0.41, 0.74], skyHor: [0.72, 0.84, 0.80], groundCol: [0.18, 0.28, 0.14], fogDens: 0.0021,
-    trackCol: [0.35, 0.23, 0.13], bankCol: [0.16, 0.33, 0.13], rockCol: [0.32, 0.34, 0.34], accentCol: [0.24, 0.46, 0.17],
-    dustCol: [0.48, 0.36, 0.24], propKind: 'forest',
+    tagline: '高山林间巨幅跌落、多线林道抄近道与林鹿惊飞',
+    taglineEn: 'Alpine forest mega-drops, braided singletrack & woodland wildlife',
+    slopeMul: 1.14, widthMul: 1.08, grip: 0.96,
+    sunDir: [-0.44, 0.42, -0.79], sunCol: [1.30, 1.22, 0.94], sunInt: 1.52, exposure: 1.00,
+    skyZen: [0.14, 0.40, 0.72], skyHor: [0.74, 0.85, 0.80], groundCol: [0.16, 0.26, 0.13], fogDens: 0.00175,
+    trackCol: [0.32, 0.21, 0.12], bankCol: [0.15, 0.31, 0.12], rockCol: [0.28, 0.31, 0.32], accentCol: [0.24, 0.42, 0.16],
+    dustCol: [0.52, 0.38, 0.24], propKind: 'forest',
     unlockCost: 900,
   },
   {
     id: 'volcano', idx: 2, name: '火山黑砂脊', en: 'Volcanic Ridge',
-    tagline: '熔岩深渊悬崖、黑砂陡降断面与极限漂移',
-    taglineEn: 'Molten abyss cliffs, obsidian step-downs & high-speed drift',
-    slopeMul: 1.18, widthMul: 0.98, grip: 0.82,
-    sunDir: [0.32, 0.24, -0.92], sunCol: [1.58, 0.68, 0.34], sunInt: 1.54, exposure: 1.08,
-    skyZen: [0.13, 0.08, 0.18], skyHor: [0.88, 0.33, 0.14], groundCol: [0.26, 0.10, 0.06], fogDens: 0.0022,
-    trackCol: [0.18, 0.16, 0.17], bankCol: [0.13, 0.11, 0.12], rockCol: [0.22, 0.15, 0.13], accentCol: [1.00, 0.34, 0.06],
-    dustCol: [0.28, 0.22, 0.20], propKind: 'volcano',
+    tagline: '黑曜石熔岩绝壁断崖、漫天火星与极速冲降',
+    taglineEn: 'Obsidian lava cliff drops, rising embers & scree-line speed',
+    slopeMul: 1.22, widthMul: 1.12, grip: 0.86,
+    sunDir: [0.32, 0.24, -0.92], sunCol: [1.62, 0.70, 0.34], sunInt: 1.58, exposure: 1.08,
+    skyZen: [0.12, 0.08, 0.17], skyHor: [0.88, 0.32, 0.14], groundCol: [0.24, 0.09, 0.06], fogDens: 0.0019,
+    trackCol: [0.16, 0.14, 0.15], bankCol: [0.11, 0.10, 0.11], rockCol: [0.20, 0.14, 0.12], accentCol: [0.98, 0.34, 0.06],
+    dustCol: [0.30, 0.24, 0.22], propKind: 'volcano',
     unlockCost: 2200,
   },
   {
     id: 'town', idx: 3, name: '悬崖山城', en: 'Hillside Town',
-    tagline: '海滨悬崖彩房、石阶连跳与巷道极速冲线',
-    taglineEn: 'Coastal cliff terraces, stepped alleys & ocean-view sprint',
-    slopeMul: 1.10, widthMul: 0.90, grip: 1.06,
-    sunDir: [-0.56, 0.30, -0.77], sunCol: [1.44, 0.94, 0.58], sunInt: 1.54, exposure: 1.01,
-    skyZen: [0.16, 0.32, 0.68], skyHor: [0.96, 0.56, 0.42], groundCol: [0.38, 0.28, 0.24], fogDens: 0.0016,
-    trackCol: [0.46, 0.43, 0.40], bankCol: [0.64, 0.46, 0.34], rockCol: [0.48, 0.38, 0.32], accentCol: [0.18, 0.68, 0.84],
-    dustCol: [0.68, 0.62, 0.54], propKind: 'town',
+    tagline: '海滨悬崖彩房、多阶跳台巷道与海鸥伴飞冲线',
+    taglineEn: 'Coastal cliff terraces, rooftop drops, alleys & ocean horizon',
+    slopeMul: 1.16, widthMul: 1.04, grip: 1.06,
+    sunDir: [-0.55, 0.30, -0.78], sunCol: [1.46, 0.96, 0.60], sunInt: 1.56, exposure: 1.01,
+    skyZen: [0.15, 0.32, 0.68], skyHor: [0.95, 0.56, 0.42], groundCol: [0.36, 0.27, 0.23], fogDens: 0.0014,
+    trackCol: [0.43, 0.40, 0.37], bankCol: [0.58, 0.42, 0.31], rockCol: [0.42, 0.34, 0.29], accentCol: [0.16, 0.66, 0.82],
+    dustCol: [0.70, 0.64, 0.56], propKind: 'town',
     unlockCost: 3800,
   },
 ];
 
 const RACE_MODES = {
-  freeride:  { id: 'freeride',  name: '自由速降', en: 'Freeride',       len: 2100, hwMul: 1.12, laneRate: 0.65, rampRate: 1.05, obsMul: 0.82, endless: false },
-  technical: { id: 'technical', name: '技术陡坡', en: 'Technical',      len: 1900, hwMul: 0.86, laneRate: 0.38, rampRate: 0.82, obsMul: 1.28, endless: false },
-  mcross:    { id: 'mcross',    name: '越野争霸', en: 'Mountain Cross', len: 1700, hwMul: 1.02, laneRate: 0.28, rampRate: 1.48, obsMul: 0.62, endless: false },
-  endless:   { id: 'endless',   name: '无尽暴走', en: 'Endless',        len: 1e9,  hwMul: 1.06, laneRate: 0.55, rampRate: 1.20, obsMul: 0.90, endless: true },
+  freeride:  { id: 'freeride',  name: '自由速降', en: 'Freeride',       len: 2300, hwMul: 1.18, laneRate: 0.85, rampRate: 1.05, obsMul: 0.78, endless: false },
+  technical: { id: 'technical', name: '技术陡坡', en: 'Technical',      len: 2100, hwMul: 0.96, laneRate: 0.70, rampRate: 0.90, obsMul: 1.18, endless: false },
+  mcross:    { id: 'mcross',    name: '越野争霸', en: 'Mountain Cross', len: 1900, hwMul: 1.12, laneRate: 0.65, rampRate: 1.40, obsMul: 0.62, endless: false },
+  endless:   { id: 'endless',   name: '无尽暴走', en: 'Endless',        len: 1e9,  hwMul: 1.22, laneRate: 0.85, rampRate: 1.15, obsMul: 0.82, endless: true },
 };
 
 const Course = (() => {
-  // Punchier Downhill Domination segment rhythm (steep chutes, cliff ledges, vertical step-downs, pump rollers)
+  // True Downhill Domination vertical scale: steep sustained descents, huge cliff plunges, wide freeride bowls!
   const SEG_TEMPLATES = {
-    opener:  { slope: 0.30, hw: 12.2, bend: 0.30, berm: 1.0, rollA: 0.15, rollL: 28, stairs: 0, kick: 1, lane: 0, cliffProb: 0.85, drops: 1 },
-    cliff:   { slope: 0.40, hw: 10.6, bend: 0.72, berm: 2.6, rollA: 0.35, rollL: 26, stairs: 0, kick: 2, lane: 1, cliffProb: 1.00, drops: 2 },
-    fast:    { slope: 0.41, hw: 11.4, bend: 0.58, berm: 2.0, rollA: 0.40, rollL: 34, stairs: 0, kick: 2, lane: 1, cliffProb: 0.55, drops: 1 },
-    berms:   { slope: 0.35, hw: 9.8,  bend: 1.18, berm: 3.8, rollA: 0.25, rollL: 24, stairs: 0, kick: 1, lane: 0, cliffProb: 0.65, drops: 1 },
-    chute:   { slope: 0.49, hw: 8.8,  bend: 0.48, berm: 1.9, rollA: 0.55, rollL: 20, stairs: 0, kick: 1, lane: 1, cliffProb: 0.70, drops: 2 },
-    kickers: { slope: 0.37, hw: 11.4, bend: 0.38, berm: 1.4, rollA: 0.30, rollL: 28, stairs: 0, kick: 3, lane: 0, cliffProb: 0.50, drops: 1 },
-    rollers: { slope: 0.34, hw: 10.4, bend: 0.68, berm: 2.2, rollA: 1.45, rollL: 19, stairs: 0, kick: 1, lane: 1, cliffProb: 0.45, drops: 1 },
-    stairs:  { slope: 0.39, hw: 9.2,  bend: 0.42, berm: 1.2, rollA: 0.0,  rollL: 28, stairs: 1, kick: 2, lane: 0, cliffProb: 0.80, drops: 2 },
-    sprint:  { slope: 0.43, hw: 12.8, bend: 0.22, berm: 0.9, rollA: 0.20, rollL: 34, stairs: 0, kick: 2, lane: 0, cliffProb: 0.60, drops: 1 },
+    opener:  { slope: 0.38, hw: 15.0, bend: 0.28, berm: 1.0, rollA: 0.15, rollL: 34, stairs: 0, kick: 1, lane: 1, cliffProb: 0.85, megaDrop: 1 },
+    cliff:   { slope: 0.48, hw: 14.5, bend: 0.65, berm: 2.2, rollA: 0.30, rollL: 32, stairs: 0, kick: 1, lane: 1, cliffProb: 1.00, megaDrop: 2 },
+    fast:    { slope: 0.49, hw: 15.5, bend: 0.55, berm: 1.8, rollA: 0.35, rollL: 38, stairs: 0, kick: 2, lane: 1, cliffProb: 0.55, megaDrop: 1 },
+    berms:   { slope: 0.42, hw: 13.8, bend: 1.10, berm: 3.4, rollA: 0.20, rollL: 30, stairs: 0, kick: 1, lane: 1, cliffProb: 0.60, megaDrop: 1 },
+    chute:   { slope: 0.56, hw: 13.0, bend: 0.45, berm: 1.6, rollA: 0.40, rollL: 28, stairs: 0, kick: 1, lane: 1, cliffProb: 0.70, megaDrop: 2 },
+    kickers: { slope: 0.44, hw: 15.0, bend: 0.35, berm: 1.2, rollA: 0.25, rollL: 34, stairs: 0, kick: 3, lane: 1, cliffProb: 0.50, megaDrop: 1 },
+    rollers: { slope: 0.41, hw: 14.5, bend: 0.62, berm: 1.9, rollA: 1.20, rollL: 24, stairs: 0, kick: 1, lane: 1, cliffProb: 0.45, megaDrop: 1 },
+    stairs:  { slope: 0.46, hw: 13.5, bend: 0.40, berm: 1.2, rollA: 0.0,  rollL: 32, stairs: 1, kick: 2, lane: 1, cliffProb: 0.80, megaDrop: 2 },
+    sprint:  { slope: 0.50, hw: 16.5, bend: 0.22, berm: 0.9, rollA: 0.15, rollL: 38, stairs: 0, kick: 2, lane: 1, cliffProb: 0.55, megaDrop: 1 },
   };
 
   const C = {
     mountain: MOUNTAINS[0],
     mode: RACE_MODES.freeride,
     seed: 202611,
-    finishS: 2100,
+    finishS: 2300,
     segs: [],
     ramps: [],
-    drops: [],       // vertical rock step-down ledges: { s, dropH, lipH, w, id }
+    drops: [],       // TRUE downhill mega cliff drop-offs: { s, dropH (12..26m), faceLen, lipH, id }
     obsBuckets: new Map(),
     plannedS: 0,
-    samples: [],     // 2m sampled spine: { s, baseY, cx, dcx, hw, slope, berm, roll, stairs, cliffL, cliffR, dropEdge, segIdx }
+    samples: [],
     rng: RNG(1),
     key: 0,
   };
 
   const STEP = 2;
-  let spinY = 1400, spinX = 0, spinHeading = 0, spinRollPh = 0;
+  let spinY = 2600, spinX = 0, spinHeading = 0, spinRollPh = 0;
 
   function mountainById(id) {
     return MOUNTAINS.find(m => m.id === id) || MOUNTAINS[0];
@@ -95,9 +95,9 @@ const Course = (() => {
 
   function pickSegType(idx, r) {
     if (idx === 0) return 'opener';
-    if (!C.mode.endless && C.plannedS + 260 >= C.finishS) return 'sprint';
+    if (!C.mode.endless && C.plannedS + 280 >= C.finishS) return 'sprint';
     if (C.mountain.id === 'town' && idx % 3 === 1) return 'stairs';
-    if (idx === 1) return 'cliff'; // Early breathtaking sheer cliff vista right after start!
+    if (idx === 1) return 'cliff';
     if (C.mode.id === 'mcross') {
       const pool = ['berms', 'kickers', 'cliff', 'rollers', 'kickers'];
       return pool[idx % pool.length];
@@ -113,27 +113,26 @@ const Course = (() => {
   function buildRampsForSeg(seg, r) {
     const count = Math.max(0, Math.round(seg.tpl.kick * C.mode.rampRate));
     for (let k = 0; k < count; k++) {
-      const frac = (k + 0.52 + (r() - 0.5) * 0.20) / (count + 0.15);
-      const rs = seg.s0 + seg.len * clamp(frac, 0.15, 0.85);
-      if (rs < 72 || (!C.mode.endless && rs > C.finishS - 85)) continue;
-      // Avoid placing a kicker directly on top of a step-down face
+      const frac = (k + 0.52 + (r() - 0.5) * 0.22) / (count + 0.18);
+      const rs = seg.s0 + seg.len * clamp(frac, 0.16, 0.85);
+      if (rs < 72 || (!C.mode.endless && rs > C.finishS - 95)) continue;
       let nearDrop = false;
       for (let j = 0; j < seg.segDrops.length; j++) {
-        if (Math.abs(rs - seg.segDrops[j].s) < 22) { nearDrop = true; break; }
+        if (Math.abs(rs - seg.segDrops[j].s) < 38) { nearDrop = true; break; }
       }
       if (nearDrop) continue;
       const sp = C.at(rs);
-      const w = 5.6 + r() * 2.4;
-      const len = 10.0 + r() * 4.2;
-      const h = (seg.type === 'kickers' || C.mode.id === 'mcross') ? (2.5 + r() * 1.2) : (1.8 + r() * 1.0);
-      const u = (r() - 0.5) * Math.max(2, sp.hw * 0.68);
+      const w = 6.2 + r() * 2.8;
+      const len = 11.0 + r() * 4.5;
+      const h = (seg.type === 'kickers' || C.mode.id === 'mcross') ? (2.8 + r() * 1.4) : (2.1 + r() * 1.1);
+      const u = (r() - 0.5) * Math.max(4, sp.hw * 0.9);
       C.ramps.push({ s: rs, u, len, w, h, shortcut: false, id: C.ramps.length });
     }
-    // Shortcut exit mega-kicker
-    if (seg.lane) {
-      const L = seg.lane;
-      const rs = L.s1 - 24;
-      C.ramps.push({ s: rs, u: L.offset, len: 11, w: 5.0, h: 2.8, shortcut: true, id: C.ramps.length });
+    // Braided shortcut exit kicker
+    for (let li = 0; li < seg.lanes.length; li++) {
+      const L = seg.lanes[li];
+      const rs = L.s1 - 26;
+      C.ramps.push({ s: rs, u: L.offset, len: 11.5, w: 5.8, h: 3.1, shortcut: true, id: C.ramps.length });
     }
   }
 
@@ -146,9 +145,9 @@ const Course = (() => {
       const idx = C.segs.length;
       const type = pickSegType(idx, r);
       const tpl = SEG_TEMPLATES[type];
-      let len = type === 'opener' ? 190 : (210 + Math.floor(r() * 100));
-      if (!C.mode.endless && C.plannedS + len > C.finishS + 260) {
-        len = Math.max(160, C.finishS + 260 - C.plannedS);
+      let len = type === 'opener' ? 210 : (240 + Math.floor(r() * 110));
+      if (!C.mode.endless && C.plannedS + len > C.finishS + 280) {
+        len = Math.max(180, C.finishS + 280 - C.plannedS);
       }
       const s0 = C.plannedS;
       const s1 = s0 + len;
@@ -156,44 +155,51 @@ const Course = (() => {
       const bendAmp = tpl.bend * bendSign * (0.65 + r() * 0.55);
       const bendFreq = (1 + (r() < 0.45 ? 1 : 0)) * PI / len;
 
-      // Single-sided sheer cliff drop-off! (0 = valley, -1 = left cliff abyss, +1 = right cliff abyss)
+      // Single-sided open abyss vista (far out past open freeride face so you can still shred wide!)
       let cliffSide = 0;
-      const cProb = tpl.cliffProb * (C.mountain.id === 'forest' ? 0.62 : 1.0);
+      const cProb = tpl.cliffProb * (C.mountain.id === 'forest' ? 0.65 : 1.0);
       if (r() < cProb) {
-        // On opener, put cliff on the RIGHT (+1) so start-gate 3/4 view overlooks a jaw-dropping canyon/ocean abyss!
         cliffSide = idx === 0 ? 1 : ((idx % 2 === 0) ? 1 : -1);
       }
 
-      // Optional branching shortcut lane — always placed on the solid mountain side, NEVER overhanging a sheer cliff!
-      let lane = null;
-      if (tpl.lane && idx > 0 && r() < C.mode.laneRate && len >= 200 && (C.mode.endless || s1 < C.finishS - 80)) {
-        const side = cliffSide !== 0 ? -cliffSide : (r() < 0.5 ? -1 : 1);
-        lane = {
-          s0: s0 + 28,
-          s1: s1 - 28,
-          side,
-          offset: side * (16 + r() * 4.5),
-          hw: 4.6,
-          drop: 1.5 + r() * 1.2,
-        };
+      // Braided multi-line shortcuts (1-2 organic alternate lines per segment splitting left/right & rejoining!)
+      const lanes = [];
+      if (tpl.lane && len >= 190 && (C.mode.endless || s1 < C.finishS - 85)) {
+        const wantCount = (idx > 0 && r() < C.mode.laneRate) ? (r() < 0.48 ? 2 : 1) : (idx === 0 ? 1 : 0);
+        for (let k = 0; k < wantCount; k++) {
+          const side = wantCount === 2 ? (k === 0 ? -1 : 1) : (cliffSide !== 0 ? -cliffSide : (r() < 0.5 ? -1 : 1));
+          const offDist = side === cliffSide ? (18 + r() * 5) : (21 + r() * 9);
+          lanes.push({
+            s0: s0 + 22 + k * 14,
+            s1: s1 - 22,
+            side,
+            offset: side * offDist,
+            hw: 6.0,
+            drop: 1.8 + r() * 1.6,
+          });
+        }
       }
 
-      // Vertical rock step-down ledges (断面) inside this segment!
+      // TRUE Downhill Domination Mega Cliff Drop-Offs (12m - 26m vertical plunges!!)
       const segDrops = [];
-      const dropCount = tpl.drops || 0;
+      const dropCount = tpl.megaDrop || 1;
       for (let d = 0; d < dropCount; d++) {
-        const ds = s0 + len * (dropCount === 1 ? (0.48 + (r() - 0.5) * 0.18) : (0.30 + d * 0.42 + (r() - 0.5) * 0.10));
-        if (ds < 58 || (!C.mode.endless && ds > C.finishS - 95)) continue;
-        const dropH = (type === 'chute' || type === 'cliff') ? (4.4 + r() * 2.4) : (3.0 + r() * 1.8);
-        const dropObj = { s: ds, dropH, lipH: 0.65 + r() * 0.45, id: C.drops.length };
+        // Place the very first breathtaking cliff drop right around s=92m so players hit it within 4 seconds!
+        const ds = (idx === 0 && d === 0)
+          ? 94
+          : s0 + len * (dropCount === 1 ? (0.48 + (r() - 0.5) * 0.14) : (0.28 + d * 0.44 + (r() - 0.5) * 0.08));
+        if (ds < 78 || (!C.mode.endless && ds > C.finishS - 110)) continue;
+        // Dramatic downhill cliff height: 13m to 25m vertical drop over a sheer 12m rock cliff face!
+        const dropH = (type === 'chute' || type === 'cliff') ? (18.0 + r() * 8.0) : (13.0 + r() * 6.5);
+        const faceLen = 12.0; // steep ~1.5:1 sheer rock cliff face!
+        const dropObj = { s: ds, dropH, faceLen, lipH: 1.15 + r() * 0.55, id: C.drops.length };
         segDrops.push(dropObj);
         C.drops.push(dropObj);
       }
 
-      const seg = { idx, type, tpl, s0, s1, len, bendAmp, bendFreq, lane, cliffSide, segDrops };
+      const seg = { idx, type, tpl, s0, s1, len, bendAmp, bendFreq, lanes, lane: lanes[0] || null, cliffSide, segDrops };
       C.segs.push(seg);
 
-      // Integrate spine samples from s0 to s1 in STEP metre increments
       const startI = Math.floor(s0 / STEP);
       const endI = Math.floor(s1 / STEP);
       for (let i = startI; i <= endI; i++) {
@@ -201,8 +207,6 @@ const Course = (() => {
         const s = i * STEP;
         const t = clamp((s - s0) / len, 0, 1);
         const blend = smooth(0, 0.14, t) * (1 - smooth(0.86, 1, t));
-
-        // Keep start gate (s < 26) calm and poised overlooking the valley
         const gateCalm = idx === 0 ? smooth(16, 36, s) : 1.0;
 
         const targetCurve = Math.sin(t * len * bendFreq) * bendAmp * 0.0115 * blend * gateCalm;
@@ -210,47 +214,54 @@ const Course = (() => {
         spinHeading *= Math.exp(-0.004 * STEP);
         spinX += Math.sin(spinHeading) * STEP;
 
-        // Punchy slope with subtle steep-pitch bursts (less uniform ski-hill glide!)
-        const pitchWave = 0.88 + 0.24 * Math.sin(s * 0.026 + C.key) + 0.10 * Math.cos(s * 0.055 + C.key * 2.1);
+        const pitchWave = 0.88 + 0.24 * Math.sin(s * 0.024 + C.key) + 0.10 * Math.cos(s * 0.052 + C.key * 1.9);
         const baseSlope = tpl.slope * C.mountain.slopeMul * pitchWave * lerp(0.55, 1.0, gateCalm);
         spinY -= baseSlope * STEP;
 
-        // Apply crisp vertical rock step-down ledges (断面) directly to spine elevation!
+        // Carve genuine sheer Mega Cliff Drop-Offs directly into mountain elevation!
         let dropEdge = 0;
+        let dropFace = 0;
         let lipBoost = 0;
         for (let k = 0; k < segDrops.length; k++) {
           const dr = segDrops[k];
           const ds = s - dr.s;
-          // Small upward kicker lip right before the drop edge so bikes launch dramatically!
-          if (ds > -7.5 && ds <= 0.5) {
-            const lt = sat((ds + 7.5) / 7.5);
+          // 10m sculpted takeoff runway rising slightly before the sheer cliff lip
+          if (ds > -11.0 && ds <= 1.0) {
+            const lt = sat((ds + 11.0) / 11.0);
             lipBoost += dr.lipH * lt * lt;
           }
-          // Crisp sheer vertical drop over ~4.5m across the rock face!
-          if (ds > 0 && ds <= 6.0) {
-            const frac = (ds <= 4.0) ? (STEP / 4.0) : 0;
-            if (frac > 0) spinY -= dr.dropH * frac;
-            dropEdge = Math.max(dropEdge, 1 - smooth(0, 6.0, ds));
+          // Sheer 13m-26m vertical cliff plunge across faceLen metres!
+          if (ds > 0 && ds <= dr.faceLen) {
+            // Smooth S-curve sheer rock wall (steepest in the middle, catching smoothly into landing chute!)
+            const u0 = (ds - STEP) / dr.faceLen, u1 = ds / dr.faceLen;
+            const s0c = u0 * u0 * (3 - 2 * u0), s1c = u1 * u1 * (3 - 2 * u1);
+            spinY -= dr.dropH * Math.max(0, s1c - s0c);
+            dropFace = 1.0;
           }
-          if (Math.abs(ds) < 2.2) dropEdge = 1.0;
+          // Mark takeoff lip zone so physics launches cleanly into huge hangtime!
+          if (ds >= -2.5 && ds <= 4.5) dropEdge = 1.0;
+          // Gently steeper catch-slope right below the cliff face (ds 12..44m) for butter-smooth stomps!
+          if (ds > dr.faceLen && ds < dr.faceLen + 32) {
+            const catchW = 1 - smooth(dr.faceLen, dr.faceLen + 32, ds);
+            spinY -= 0.16 * catchW * STEP;
+          }
         }
 
         spinRollPh += STEP / tpl.rollL;
         const hw = tpl.hw * C.mountain.widthMul * C.mode.hwMul;
-        const berm = -targetCurve * 245 * tpl.berm;
+        const berm = -targetCurve * 220 * tpl.berm;
         const roll = tpl.rollA * Math.sin(spinRollPh * TAU) * blend * gateCalm;
 
-        // Broad, natural geological cliff-rim transition (no abrupt knife-edge wall transitions!)
         const cliffFade = smooth(0, 0.28, t) * (1 - smooth(0.72, 1.0, t));
-        const cAmt = (idx === 0 ? smooth(14, 42, s) : 1.0) * cliffFade;
+        const cAmt = (idx === 0 ? smooth(16, 46, s) : 1.0) * cliffFade;
         const cliffL = cliffSide === -1 ? cAmt : 0;
         const cliffR = cliffSide ===  1 ? cAmt : 0;
 
         C.samples.push({
           s, baseY: spinY + lipBoost, cx: spinX, dcx: Math.sin(spinHeading),
-          hw, slope: baseSlope, berm: clamp(berm, -4.2, 4.2), roll,
+          hw, slope: baseSlope + dropFace * 0.55, berm: clamp(berm, -3.6, 3.6), roll,
           stairs: tpl.stairs * blend,
-          cliffL, cliffR, dropEdge, segIdx: idx,
+          cliffL, cliffR, dropEdge, dropFace, segIdx: idx,
         });
       }
 
@@ -273,8 +284,8 @@ const Course = (() => {
     C.samples = [];
     C.plannedS = 0;
     C.rng = RNG(C.seed ^ hashU(C.mountain.idx * 7919 + C.mode.id.length * 131));
-    spinY = 1600; spinX = 0; spinHeading = 0; spinRollPh = 0;
-    planTo(C.mode.endless ? 1400 : C.finishS + 450);
+    spinY = 2600; spinX = 0; spinHeading = 0; spinRollPh = 0;
+    planTo(C.mode.endless ? 1500 : C.finishS + 480);
   };
 
   C.ensureTo = function (s) {
@@ -302,101 +313,109 @@ const Course = (() => {
       cliffL: lerp(a.cliffL, b.cliffL, t),
       cliffR: lerp(a.cliffR, b.cliffR, t),
       dropEdge: Math.max(a.dropEdge, b.dropEdge),
+      dropFace: Math.max(a.dropFace, b.dropFace),
       seg,
     };
   };
 
+  // Evaluate ALL active braided shortcut lines at distance s
+  C.lanesAt = function (s, seg) {
+    if (!seg || !seg.lanes || !seg.lanes.length) return [];
+    const out = [];
+    for (let i = 0; i < seg.lanes.length; i++) {
+      const L = seg.lanes[i];
+      if (s < L.s0 || s > L.s1) continue;
+      const enter = smooth(L.s0, L.s0 + 36, s);
+      const exit = 1 - smooth(L.s1 - 34, L.s1, s);
+      const blend = enter * exit;
+      if (blend > 0.02) out.push({ u: L.offset * blend, hw: L.hw, blend, drop: L.drop * blend, side: L.side });
+    }
+    return out;
+  };
   C.laneAt = function (s, seg) {
-    if (!seg || !seg.lane) return null;
-    const L = seg.lane;
-    if (s < L.s0 || s > L.s1) return null;
-    const enter = smooth(L.s0, L.s0 + 36, s);
-    const exit = 1 - smooth(L.s1 - 32, L.s1, s);
-    const blend = enter * exit;
-    return { u: L.offset * blend, hw: L.hw, blend, drop: L.drop * blend, side: L.side };
+    const arr = C.lanesAt(s, seg);
+    return arr.length ? arr[0] : null;
   };
 
-  // Exact ground height at world (x, z) — supports sheer cliff drop-offs, terraced canyon walls, step-downs & kickers!
-  C.height = function (x, z, spOpt, laneOpt, rampsOpt) {
+  // Exact ground height at world (x, z) — wide open freeride mountain bowl + braided trails + sheer cliff overlooks!
+  C.height = function (x, z, spOpt, lanesOpt, rampsOpt) {
     const s = Math.max(0, -z);
     const sp = spOpt || C.at(s);
     const u = x - sp.cx;
     const au = Math.abs(u);
     const hw = sp.hw;
 
-    // 1. Track bed + banked berm + subtle dish
-    const uNorm = clamp(u / hw, -1.6, 1.6);
-    const dish = 0.30 * (uNorm * uNorm);
-    const bermH = sp.berm * smooth(0.15, 1.05, Math.abs(uNorm)) * (u * sp.berm > 0 ? 1 : -0.18);
+    // 1. Wide natural valley bowl + subtle banked berms (no hard artificial gutters!)
+    const uNorm = clamp(u / (hw * 1.15), -1.8, 1.8);
+    const dish = 0.42 * (uNorm * uNorm);
+    const bermH = sp.berm * smooth(0.20, 1.15, Math.abs(uNorm)) * (u * sp.berm > 0 ? 1 : -0.14);
     let y = sp.baseY + dish + Math.max(0, bermH) + sp.roll;
 
-    // Town stepped staircases
-    if (sp.stairs > 0.05 && au < hw * 1.05) {
+    if (sp.stairs > 0.05 && au < hw * 1.15) {
       const stepPhase = fract(s * 0.28);
-      y += (0.5 - stepPhase) * 0.45 * sp.stairs;
+      y += (0.5 - stepPhase) * 0.44 * sp.stairs;
     }
 
-    // 2. Outer terrain: either sheer cliff abyss drop-off OR sculpted terraced mountain wall!
+    // 2. Braided alternate trails / natural shortcuts (slightly carved faster chutes!)
+    const lanes = lanesOpt !== undefined ? lanesOpt : C.lanesAt(s, sp.seg);
     let offDist = Math.max(0, au - hw);
-    const lane = laneOpt !== undefined ? laneOpt : C.laneAt(s, sp.seg);
-    let laneMask = 0;
-    if (lane && lane.blend > 0.05) {
-      const lu = Math.abs(u - lane.u);
-      const lOff = Math.max(0, lu - lane.hw);
-      if (lOff < offDist) {
-        offDist = lOff;
-        laneMask = (1 - smooth(lane.hw * 0.7, lane.hw + 2.5, lu)) * lane.blend;
-      }
+    let laneDrop = 0;
+    for (let i = 0; i < lanes.length; i++) {
+      const L = lanes[i];
+      const lu = Math.abs(u - L.u);
+      const lOff = Math.max(0, lu - L.hw);
+      if (lOff < offDist) offDist = lOff;
+      const lm = (1 - smooth(L.hw * 0.72, L.hw + 4.0, lu)) * L.blend;
+      if (lm > 0.01) laneDrop = Math.max(laneDrop, L.drop * lm);
     }
+    y -= laneDrop;
 
+    // 3. Wide rideable open freeride mountainside! (gently rolling for 32m outside trails so cutting wide is FUN & rideable!)
     if (offDist > 0) {
       const cliffW = u < 0 ? sp.cliffL : sp.cliffR;
-      const n1 = fbm2(x * 0.015, z * 0.015, 3, C.seed & 4095);
-      const n2 = vnoise2(x * 0.052, z * 0.052, (C.seed + 77) & 4095);
+      const n1 = fbm2(x * 0.013, z * 0.013, 3, C.seed & 4095);
+      const n2 = vnoise2(x * 0.048, z * 0.048, (C.seed + 77) & 4095);
 
-      // Rising terraced mountain flank
-      const gentle = Math.min(offDist, 8) * 0.20;
-      const outer = Math.max(0, offDist - 8);
-      const wallScale = C.mountain.id === 'redrock' ? 0.36 : C.mountain.id === 'town' ? 0.28 : C.mountain.id === 'volcano' ? 0.34 : 0.26;
-      const rawRise = gentle + Math.pow(outer, 1.08) * wallScale + (n1 * 0.5 + 0.5) * Math.min(26, outer * 0.42);
-      const riseY = C.mountain.id === 'redrock'
-        ? Math.floor(rawRise / 4.5) * 2.1 + rawRise * 0.54
-        : rawRise;
+      // Gentle rideable open flank first 26m, then monumental terraced canyon/mountain ridge far out!
+      const openFlank = Math.min(offDist, 26) * 0.14 + (n1 * 0.5 + 0.5) * Math.min(4.5, offDist * 0.18);
+      const outer = Math.max(0, offDist - 26);
+      const wallScale = C.mountain.id === 'redrock' ? 0.34 : C.mountain.id === 'town' ? 0.26 : C.mountain.id === 'volcano' ? 0.32 : 0.24;
+      const outerRise = Math.pow(outer, 1.10) * wallScale + (n1 * 0.5 + 0.5) * Math.min(28, outer * 0.42);
+      const riseY = openFlank + (C.mountain.id === 'redrock'
+        ? Math.floor(outerRise / 5.0) * 2.2 + outerRise * 0.56
+        : outerRise);
 
       if (cliffW > 0.01) {
-        // Dramatic single-sided sheer cliff drop-off into open chasm / coastal ocean / lava gorge!
-        const shoulder = Math.max(0, offDist - 2.2);
-        const dropDepth = C.mountain.id === 'town' ? 58 : C.mountain.id === 'volcano' ? 78 : 72;
-        const steepDrop = -dropDepth * smooth(0, 34, shoulder) - Math.min(35, shoulder * 0.25);
-        // Subtle terraced rock ledges halfway down the cliff face
-        const rockLedge = Math.sin(shoulder * 0.28 + n1 * 2.5) * 1.8 * smooth(2, 18, shoulder) * (1 - smooth(38, 65, shoulder));
-        const cliffY = steepDrop + rockLedge;
-        y += lerp(riseY, cliffY, cliffW) + n2 * Math.min(2.6, offDist * 0.11);
+        // Rideable cliff shoulder 16m wide, THEN plunging into a breathtaking 85m deep canyon/coastal/lava abyss!
+        const shoulder = Math.max(0, offDist - 16.0);
+        const dropDepth = C.mountain.id === 'town' ? 68 : C.mountain.id === 'volcano' ? 92 : 85;
+        const steepDrop = -dropDepth * smooth(0, 38, shoulder) - Math.min(40, shoulder * 0.28);
+        const ledge = Math.sin(shoulder * 0.24 + n1 * 2.4) * 2.2 * smooth(4, 22, shoulder) * (1 - smooth(42, 70, shoulder));
+        const cliffY = Math.min(offDist, 16.0) * 0.06 + steepDrop + ledge;
+        y += lerp(riseY, cliffY, cliffW) + n2 * Math.min(2.4, offDist * 0.09);
       } else {
-        y += riseY + n2 * Math.min(2.6, offDist * 0.11);
+        y += riseY + n2 * Math.min(2.4, offDist * 0.09);
       }
-    } else if (laneMask > 0.01) {
-      y -= lane.drop * laneMask;
     }
 
-    // Small organic dirt micro-bump on track
-    const micro = vnoise2(x * 0.17, z * 0.17, 913) * 0.14;
-    y += micro * (C.mountain.id === 'town' ? 0.32 : 1.0);
+    // Natural organic earth micro-undulation
+    const micro = vnoise2(x * 0.16, z * 0.16, 913) * 0.12;
+    y += micro * (C.mountain.id === 'town' ? 0.3 : 1.0);
 
-    // 3. Kicker ramps (smooth upward lip + crisp drop behind)
+    // 4. Kicker ramps
     const rList = rampsOpt || C.ramps;
     for (let i = 0; i < rList.length; i++) {
       const rm = rList[i];
-      if (s < rm.s - rm.len || s > rm.s + 2.2) continue;
+      if (s < rm.s - rm.len || s > rm.s + 2.4) continue;
       const du = Math.abs(u - rm.u);
-      if (du > rm.w * 0.5 + 1.8) continue;
-      const sideM = 1 - smooth(rm.w * 0.44, rm.w * 0.5 + 1.6, du);
+      if (du > rm.w * 0.5 + 2.0) continue;
+      const sideM = 1 - smooth(rm.w * 0.44, rm.w * 0.5 + 1.8, du);
       let prof = 0;
       if (s <= rm.s) {
         const t = sat((s - (rm.s - rm.len)) / rm.len);
         prof = t * t * (1.28 - 0.28 * t);
       } else {
-        prof = 1 - smooth(rm.s, rm.s + 1.8, s);
+        prof = 1 - smooth(rm.s, rm.s + 2.0, s);
       }
       y += rm.h * prof * sideM;
     }
@@ -411,34 +430,37 @@ const Course = (() => {
     return v3.norm([hL - hR, 2 * e, hD - hU]);
   };
 
+  // Open freeride surface query: whole mountainside is fast & rideable (no harsh off-track penalty!)
   C.surface = function (x, z) {
     const s = Math.max(0, -z);
     const sp = C.at(s);
     const u = x - sp.cx;
     const au = Math.abs(u);
-    const lane = C.laneAt(s, sp.seg);
+    const lanes = C.lanesAt(s, sp.seg);
     let onShortcut = false;
     let offDist = Math.max(0, au - sp.hw);
-    if (lane && lane.blend > 0.1) {
-      const lOff = Math.max(0, Math.abs(u - lane.u) - lane.hw);
+    for (let i = 0; i < lanes.length; i++) {
+      const L = lanes[i];
+      const lOff = Math.max(0, Math.abs(u - L.u) - L.hw);
       if (lOff < offDist) {
         offDist = lOff;
-        onShortcut = lOff <= 0.4;
+        if (lOff <= 1.2) onShortcut = true;
       }
     }
     let onRamp = false;
     for (let i = 0; i < C.ramps.length; i++) {
       const rm = C.ramps[i];
-      if (s >= rm.s - rm.len && s <= rm.s + 0.6 && Math.abs(u - rm.u) <= rm.w * 0.52) {
+      if (s >= rm.s - rm.len && s <= rm.s + 0.7 && Math.abs(u - rm.u) <= rm.w * 0.54) {
         onRamp = true; break;
       }
     }
     const cliffSide = u < 0 ? sp.cliffL : sp.cliffR;
-    const overCliff = cliffSide > 0.35 && offDist > 4.5;
-    const onTrack = offDist <= 0.45;
-    const grip = C.mountain.grip * (onTrack ? 1.0 : 0.68);
-    const drag = onTrack ? 0.0 : clamp(offDist * 0.08, 0.05, 0.55);
-    return { onTrack, onShortcut, onRamp, overCliff, offDist, u, hw: sp.hw, grip, drag, stairs: sp.stairs, dropEdge: sp.dropEdge };
+    const overCliff = cliffSide > 0.35 && offDist > 20.0;
+    const onTrack = offDist <= 3.5;
+    // Freeride joy: minimal drag even far off the beaten trail so players can carve shortcuts freely!
+    const grip = C.mountain.grip * (offDist <= 20 ? 0.96 : 0.82);
+    const drag = offDist <= 18 ? 0.0 : clamp((offDist - 18) * 0.008, 0.0, 0.14);
+    return { onTrack, onShortcut, onRamp, overCliff, offDist, u, hw: sp.hw, grip, drag, stairs: sp.stairs, dropEdge: sp.dropEdge, dropFace: sp.dropFace };
   };
 
   C.rampsNear = function (s0, s1) {
@@ -454,12 +476,12 @@ const Course = (() => {
     const out = [];
     for (let i = 0; i < C.drops.length; i++) {
       const dr = C.drops[i];
-      if (dr.s + 8 >= s0 && dr.s - 10 <= s1) out.push(dr);
+      if (dr.s + 16 >= s0 && dr.s - 12 <= s1) out.push(dr);
     }
     return out;
   };
 
-  // Deterministic obstacle & scenic landmark generator in 40m buckets
+  // Natural scattered wilderness trees, hoodoo spires, basalt crags & hillside houses across the wide open mountain
   const BUCKET = 40;
   function buildObsBucket(bi) {
     const list = [];
@@ -469,36 +491,44 @@ const Course = (() => {
     const kind = C.mountain.propKind;
     const finishClear = !C.mode.endless && Math.abs(s0 + 20 - C.finishS) < 55;
 
-    // 1. Trackside dense landmarks (only on non-cliff solid shoulders so nothing hovers over an abyss!)
-    const edgeCount = Math.round((kind === 'forest' ? 20 : kind === 'town' ? 14 : 13) * (0.85 + rng() * 0.3));
+    // 1. Open mountainside natural landmarks & trees (well spaced so you can weave between them on shortcuts!)
+    const edgeCount = Math.round((kind === 'forest' ? 24 : kind === 'town' ? 15 : 15) * (0.85 + rng() * 0.3));
     for (let i = 0; i < edgeCount; i++) {
       const s = s0 + rng() * BUCKET;
       const sp = C.at(s);
       const side = rng() < 0.5 ? -1 : 1;
       const sideCliff = side < 0 ? sp.cliffL : sp.cliffR;
-      if (sideCliff > 0.25) continue; // Keep sheer cliff drop-off wide open & scenic!
-
-      const distOut = sp.hw + 1.9 + rng() * 18.0;
+      const maxOut = sideCliff > 0.25 ? 12.0 : 42.0;
+      const distOut = sp.hw * 0.85 + 2.5 + rng() * maxOut;
       const u = side * distOut;
-      const lane = C.laneAt(s, sp.seg);
-      if (lane && Math.abs(u - lane.u) < lane.hw + 2.6) continue;
+
+      // Keep main braided shortcut lanes clean!
+      const lanes = C.lanesAt(s, sp.seg);
+      let blocksLane = false;
+      for (let k = 0; k < lanes.length; k++) {
+        if (Math.abs(u - lanes[k].u) < lanes[k].hw + 2.6) { blocksLane = true; break; }
+      }
+      if (blocksLane) continue;
+      // Keep mega drop cliff faces clean!
+      if (sp.dropFace > 0.2 || sp.dropEdge > 0.2) continue;
+
       const x = sp.cx + u, z = -s, y = C.height(x, z);
       const n = C.normal(x, z);
-      if (n[1] < 0.70) continue;
+      if (n[1] < 0.72) continue;
 
-      const scale = 0.85 + rng() * 0.95;
+      const scale = 0.85 + rng() * 1.05;
       const sub = kind === 'forest' ? (rng() < 0.84 ? 'pine' : 'boulder')
-        : kind === 'canyon' ? (rng() < 0.42 ? 'spire' : rng() < 0.78 ? 'boulder' : 'cactus')
-        : kind === 'volcano' ? (rng() < 0.68 ? 'basalt' : 'ember')
-        : (rng() < 0.78 ? 'house' : 'lamp');
-      const r = sub === 'house' ? 3.2 * scale : sub === 'spire' ? 2.1 * scale : (sub === 'boulder' || sub === 'basalt') ? 1.55 * scale : 0.78 * scale;
-      const h = sub === 'house' ? 6.8 * scale : sub === 'pine' ? 10.5 * scale : sub === 'spire' ? 8.2 * scale : 3.4 * scale;
+        : kind === 'canyon' ? (rng() < 0.38 ? 'spire' : rng() < 0.72 ? 'boulder' : 'cactus')
+        : kind === 'volcano' ? (rng() < 0.66 ? 'basalt' : 'ember')
+        : (rng() < 0.76 ? 'house' : 'lamp');
+      const r = sub === 'house' ? 3.2 * scale : sub === 'spire' ? 2.1 * scale : (sub === 'boulder' || sub === 'basalt') ? 1.50 * scale : 0.78 * scale;
+      const h = sub === 'house' ? 6.8 * scale : sub === 'pine' ? 11.2 * scale : sub === 'spire' ? 8.6 * scale : 3.4 * scale;
       list.push({ id: bi * 100 + i, s, u, x, y, z, r, h, scale, kind: sub, onTrack: false, colorIdx: Math.floor(rng() * 5) });
     }
 
-    // 2. On-track risk boulders / barriers (never near ramps or vertical drop-offs)
+    // 2. Occasional mid-valley boulders / barriers (never blocking mega drops or ramps)
     if (!finishClear) {
-      const hazCount = Math.floor((1.0 + rng() * 1.3) * C.mode.obsMul);
+      const hazCount = Math.floor((0.9 + rng() * 1.2) * C.mode.obsMul);
       for (let i = 0; i < hazCount; i++) {
         const s = s0 + 5 + rng() * (BUCKET - 10);
         const sp = C.at(s);
@@ -508,11 +538,11 @@ const Course = (() => {
           if (s > rm.s - rm.len - 10 && s < rm.s + 22) { skip = true; break; }
         }
         for (let k = 0; k < C.drops.length; k++) {
-          if (Math.abs(s - C.drops[k].s) < 20) { skip = true; break; }
+          if (s > C.drops[k].s - 22 && s < C.drops[k].s + 42) { skip = true; break; }
         }
         if (skip) continue;
         const side = rng() < 0.5 ? -1 : 1;
-        const u = side * (2.8 + rng() * Math.max(1.5, sp.hw - 4.4));
+        const u = side * (4.0 + rng() * Math.max(2.5, sp.hw - 5.2));
         const x = sp.cx + u, z = -s, y = C.height(x, z);
         const sub = kind === 'town' ? 'barrier' : kind === 'volcano' ? 'basalt' : 'boulder';
         const scale = 0.65 + rng() * 0.42;

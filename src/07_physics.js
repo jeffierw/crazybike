@@ -36,6 +36,8 @@ const Physics = (() => {
       airTime: 0,
       airPeak: 0,
       airStartY: y,
+      landGrace: 0,
+      prevSlopeVy: 0,
       charge: 0,
       wasJumpHeld: false,
       susp: 0,
@@ -319,7 +321,8 @@ const Physics = (() => {
       }
       R.wasJumpHeld = jumpHeld;
 
-      // Advance horizontal position & check ground tracking vs ramp launch!
+      // Advance horizontal position & check ground tracking vs real cliff/ramp launches!
+      if (R.landGrace > 0) R.landGrace = Math.max(0, R.landGrace - dt);
       const prevY = R.pos[1];
       R.pos[0] += R.vel[0] * dt;
       R.pos[2] += R.vel[2] * dt;
@@ -327,39 +330,46 @@ const Physics = (() => {
       const slopeVy = (nextGY - prevY) / Math.max(dt, 1e-4);
 
       if (!R.air) {
-        // Detect launching cleanly off a kicker lip, vertical step-down rock ledge (断面), or steep drop!
-        const dropRate = R.vel[1] - slopeVy;
-        const onDropLedge = surf.dropEdge > 0.35 && slopeVy < -3.6 && hSpeed > 11;
-        if ((R.onRamp && slopeVy < -2.6 && hSpeed > 12) || onDropLedge || (dropRate > 7.2 && hSpeed > 13)) {
+        // ONLY launch off a real kicker ramp, real sheer cliff drop-off (大断崖), or sharp ridge crest (NEVER bounce right after landing!)
+        const onDropLedge = surf.dropEdge > 0.35 && slopeVy < -5.8 && hSpeed > 11;
+        const suddenCrest = R.landGrace <= 0 && (R.prevSlopeVy - slopeVy) > 10.5 && slopeVy < -6.5 && hSpeed > 16;
+        if ((R.onRamp && slopeVy < -2.6 && hSpeed > 12) || onDropLedge || suddenCrest) {
           R.air = true;
           R.airTime = 0;
           R.airStartY = prevY;
           R.airPeak = prevY;
           R.airStartS = s;
-          // Preserve upward ramp launch velocity + natural kicker/drop pop for awesome hangtime
-          const popV = R.onRamp ? clamp(hSpeed * 0.40, 5.2, 12.8) : onDropLedge ? clamp(hSpeed * 0.22, 3.2, 6.8) : 1.8;
+          // Preserve upward ramp launch velocity or forward lip pop off sheer cliff drops!
+          const popV = R.onRamp ? clamp(hSpeed * 0.42, 5.5, 13.0) : onDropLedge ? clamp(hSpeed * 0.16, 2.5, 5.6) : Math.max(R.prevSlopeVy, 0.5);
           R.vel[1] = Math.max(R.vel[1], popV);
           R.pos[1] = prevY + R.vel[1] * dt;
           emit({ type: 'launch', rider: R, speed: hSpeed });
         } else {
-          // Stick to terrain & compress suspension over bumps/stairs
+          // Stay firmly planted on terrain, compress suspension over bumps & continue pedaling smoothly!
           const deltaVy = slopeVy - R.vel[1];
-          if (deltaVy > 1.5) R.suspV += deltaVy * 0.045;
-          if (surf.stairs > 0.15) R.suspV += 0.25 * surf.stairs * Math.sin(s * 1.8);
+          if (deltaVy > 2.2) R.suspV += deltaVy * 0.036;
+          if (surf.stairs > 0.15) R.suspV += 0.22 * surf.stairs * Math.sin(s * 1.8);
           R.pos[1] = nextGY;
-          R.vel[1] = clamp(slopeVy, -24, 14);
+          R.vel[1] = clamp(slopeVy, -32, 14);
         }
       }
+      R.prevSlopeVy = slopeVy;
 
       // Visual bike pitch & lean roll
       const targetPitch = Math.atan2(nextGY - Course.height(R.pos[0] - fx * 1.4, R.pos[2] - fz * 1.4), 1.4);
-      R.pitch = damp(R.pitch, clamp(targetPitch, -0.65, 0.55), 14, dt);
+      R.pitch = damp(R.pitch, clamp(targetPitch, -0.78, 0.55), 14, dt);
       const targetRoll = clamp(R.steer * 0.52 * smooth(5, 22, hSpeed) + (R.skid > 0 ? R.steer * 0.22 : 0), -0.78, 0.78);
       R.roll = damp(R.roll, targetRoll, 11, dt);
 
-      // Pedaling & wheel spin animation
-      R.wheelSpin -= newVFwd / 0.42 * dt;
-      if (pedal || R.boosting) R.pedalPhase += dt * (R.boosting ? 15 : 10);
+      // Energetic Downhill Domination fast pedaling cadence & wheel spin!
+      R.wheelSpin -= newVFwd / 0.40 * dt;
+      if (pedal || R.boosting) {
+        const rpm = R.boosting ? 29 : lerp(17, 24, sat(newVFwd / 26));
+        R.pedalPhase += dt * rpm;
+      } else if (newVFwd > 4 && !brake) {
+        // Gentle idle cadence coasting on flat/gentle slopes
+        R.pedalPhase += dt * 4.5;
+      }
 
     } else {
       // ---- AIRBORNE PHYSICS & MID-AIR TRICKS (Step 5 plugs in seamlessly here) ----
@@ -403,13 +413,18 @@ const Physics = (() => {
           return;
         }
 
-        // Suspension absorbs impact!
-        R.susp = clamp(R.susp + impactVy * 0.020, 0, 0.28);
-        R.suspV = impactVy * 0.05;
-        const speedLoss = clamp((impactVy - 11) * 0.024 * (1 - st.shockAbsorb * 0.6), 0, 0.24);
+        // Suspension absorbs impact & matches downhill terrain slope cleanly (ZERO pogo-bouncing after landing!)
+        R.susp = clamp(R.susp + impactVy * 0.018, 0, 0.26);
+        R.suspV = impactVy * 0.045;
+        const speedLoss = clamp((impactVy - 14) * 0.020 * (1 - st.shockAbsorb * 0.6), 0, 0.20);
         R.vel[0] *= (1 - speedLoss);
         R.vel[2] *= (1 - speedLoss);
-        R.vel[1] = 0;
+        const hSpdL = Math.hypot(R.vel[0], R.vel[2]);
+        const fxL = -Math.sin(R.yaw), fzL = -Math.cos(R.yaw);
+        const groundSlope = (Course.height(R.pos[0] + fxL * 1.2, R.pos[2] + fzL * 1.2) - nextGY) / 1.2;
+        R.vel[1] = clamp(groundSlope * hSpdL, -30, 8);
+        R.prevSlopeVy = R.vel[1];
+        R.landGrace = 0.36;
         emit({ type: 'land', rider: R, impact: impactVy, airDist, airTime: R.airTime });
       }
     }
@@ -420,21 +435,21 @@ const Physics = (() => {
     R.suspV += suspF * dt;
     R.susp = clamp(R.susp + R.suspV * dt, -0.07, 0.28);
 
-    // Track corridor containment + sheer cliff plunge detection
+    // Wide open freeride mountain containment + sheer abyss plunge check
     R.s = Math.max(0, -R.pos[2]);
     const spNow = Course.at(R.s);
     R.u = R.pos[0] - spNow.cx;
     const cliffSide = R.u < 0 ? spNow.cliffL : spNow.cliffR;
-    if (cliffSide > 0.35 && Math.abs(R.u) > spNow.hw + 7.5 && R.pos[1] < spNow.baseY - 12.0) {
+    if (cliffSide > 0.35 && Math.abs(R.u) > spNow.hw + 24.0 && R.pos[1] < spNow.baseY - 22.0) {
       triggerCrash(R, 'cliff', sign(R.u) * 4, 0, R.lastHitBy);
       return;
     }
-    const maxU = R.isPlayer ? (spNow.hw + 24) : (spNow.hw + 4.2);
+    const maxU = R.isPlayer ? (spNow.hw + 48) : (spNow.hw + 12);
     if (Math.abs(R.u) > maxU) {
       const sgn = sign(R.u);
       R.pos[0] = spNow.cx + sgn * maxU;
       R.u = sgn * maxU;
-      if (R.vel[0] * sgn > 0) R.vel[0] *= -0.35;
+      if (R.vel[0] * sgn > 0) R.vel[0] *= -0.25;
     }
 
     // Obstacle collisions (trees, boulders, basalt spires, houses, barriers)
