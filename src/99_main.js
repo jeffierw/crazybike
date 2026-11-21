@@ -363,7 +363,7 @@ const App = (() => {
       Terrain.update(player.s, player.pos[0]);
       cam = Photo.step(dt, aspect);
       focusPos = [player.pos[0], player.pos[1], player.pos[2] - 12];
-      Props.emit(player.s, time, quality, player.pos[0]);
+      Props.emit(player.s, time, quality, player.pos[0], cam.eye);
       Wildlife.emit();
       for (let i = 0; i < allRiders.length; i++) {
         if (Math.abs(allRiders[i].s - player.s) < 250) BikeMesh.emitRider(allRiders[i], time);
@@ -373,7 +373,7 @@ const App = (() => {
       Terrain.update(player.s, player.pos[0]);
       cam = Camera.update(player, dt, aspect, Feel, state === 'pause');
       focusPos = [player.pos[0], player.pos[1], player.pos[2] - 14];
-      Props.emit(player.s, time, quality, player.pos[0]);
+      Props.emit(player.s, time, quality, player.pos[0], cam.eye);
       Wildlife.emit();
       for (let i = 0; i < allRiders.length; i++) {
         if (Math.abs(allRiders[i].s - player.s) < 250) BikeMesh.emitRider(allRiders[i], time);
@@ -395,7 +395,7 @@ const App = (() => {
       Particles.emitAmbient(focusPos, dt, quality);
       Particles.emitWaterfalls(12, titleRider.pos[0], dt, quality);
       Particles.step(dt);
-      Props.emit(12, time, quality, titleRider.pos[0]);
+      Props.emit(12, time, quality, titleRider.pos[0], cam.eye);
       Wildlife.emit();
       BikeMesh.emitRider(titleRider, time);
       for (let i = 0; i < titleRivals.length; i++) BikeMesh.emitRider(titleRivals[i], time);

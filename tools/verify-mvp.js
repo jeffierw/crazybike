@@ -12,11 +12,17 @@ const srcDir = path.join(root, 'src');
 const files = fs.readdirSync(srcDir).filter(f => f.endsWith('.js') && f !== '99_main.js').sort();
 
 const store = {};
+const listeners = { keydown: [], keypress: [], keyup: [] };
 const ctx = vm.createContext({
   location: { search: '', hash: '', pathname: '/' },
   localStorage: { getItem: k => store[k] || null, setItem: (k, v) => { store[k] = v; } },
   document: { getElementById: () => null, documentElement: {} },
-  addEventListener: () => {},
+  addEventListener: (ev, fn) => { if (!listeners[ev]) listeners[ev] = []; listeners[ev].push(fn); },
+  dispatchMockKey: (evType, props) => {
+    const e = Object.assign({ defaultPrevented: false, target: {}, preventDefault() { this.defaultPrevented = true; } }, props);
+    for (const fn of (listeners[evType] || [])) fn(e);
+    return e;
+  },
   innerWidth: 1280,
   innerHeight: 720,
   navigator: { languages: ['zh-CN'], language: 'zh-CN' },
@@ -69,8 +75,9 @@ vm.runInContext(`
   assert(rm && rm.nv > 3000 && rm.ms < 4000 && badRm === 0 && matIds.size >= 8,
     'SDF RiderMesh valid (' + rm.nv + ' verts, ' + (rm.ni / 3) + ' tris, ' + matIds.size + ' gear materials in ' + Math.round(rm.ms) + 'ms)');
 
-  // 2. 4-mountain cliffs, vertical step-downs, terrain streaming & 8-rider simulation audit
+  // 2. 4-mountain cliffs (random 6..66m), halfpipes, creeks, waterfalls, dodge-only zero-crash 8-rider simulation audit
   const t0 = Date.now();
+  let minDropH = 999, maxDropH = 0, totalCrashes = 0, halfpipeSegs = 0, waterfallDrops = 0, activeCreeks = 0;
   for (let mi = 0; mi < MOUNTAINS.length; mi++) {
     const m = MOUNTAINS[mi];
     Course.init(m.id, 'freeride', 202611 + mi * 77);
@@ -80,6 +87,10 @@ vm.runInContext(`
     Combat.reset();
 
     const cliffSegs = Course.segs.filter(s => s.cliffSide !== 0).length;
+    halfpipeSegs += Course.segs.filter(s => s.type === 'halfpipe').length;
+    waterfallDrops += Course.drops.filter(d => d.hasWaterfall).length;
+    if (Course.creekAt(90).active) activeCreeks++;
+    for (const dr of Course.drops) { minDropH = Math.min(minDropH, dr.dropH); maxDropH = Math.max(maxDropH, dr.dropH); }
     const dropsN = Course.drops.length;
 
     const P = Physics.createRider({ isPlayer: true, s: 12, u: 0, initSpeed: 12, upgrades: { frame: mi, fork: mi, drive: mi, tires: mi, combat: mi } });
@@ -104,11 +115,12 @@ vm.runInContext(`
       Stunts.drainEvents();
       Physics.drainEvents();
       if (i % 120 === 0) {
-        Solid.clear(); Props.emit(P.s, t);
+        Solid.clear(); Props.emit(P.s, t, 'auto', P.pos[0]);
         for (const r of all) BikeMesh.emitRider(r, t);
         Combat.emitProjectiles(); Solid.upload();
       }
     }
+    for (const r of all) totalCrashes += r.crashes;
     const minAiS = Math.min(...R.map(r => r.s));
     assert(
       P.s > 260 && minAiS > 220 && Camera.minClearance >= 0.40 && cliffSegs >= 1 && dropsN >= 4,
@@ -117,7 +129,10 @@ vm.runInContext(`
   }
   const simMs = Date.now() - t0;
   const msPerFrame = simMs / (MOUNTAINS.length * 900);
-  assert(msPerFrame < 6.0, 'All 4 mountains terrain + 3600 frames of 8-rider physics averaged ' + msPerFrame.toFixed(2) + 'ms/frame (<6ms budget)');
+  assert(
+    msPerFrame < 6.0 && totalCrashes === 0 && minDropH <= 15 && maxDropH >= 34 && halfpipeSegs >= 4 && waterfallDrops >= 4 && activeCreeks >= 2,
+    'V4 World & Dodge audit: crashes=' + totalCrashes + ', cliffRange=' + minDropH.toFixed(1) + '..' + maxDropH.toFixed(1) + 'm, halfpipes=' + halfpipeSegs + ', waterfalls=' + waterfallDrops + ', perf=' + msPerFrame.toFixed(2) + 'ms/frame'
+  );
 
   // 3. All 8 slope-adaptive camera views, high-pitch chase framing revealing road 30m ahead, FPV lensCut & Photo Mode
   Course.init('redrock', 'freeride', 202611);
@@ -170,7 +185,21 @@ vm.runInContext(`
   assert(!RS.crashed && !prematureSwitch && chain.length >= 2 && reboundAfterLand === 0 && maxRibVerts > 24 && bfBail === false,
     'V4 Stunts complete-then-chain (' + chain.join(' -> ') + '), zero premature switch, zero post-land bounce, inkRibbons=' + maxRibVerts + ', zeroCrash=OK');
 
-  // 5. Endless recycler, Career progression & I18N ZH/EN switch
+  // 5. V4 Infinite boundary-free Endless slope + dodge-only head-on test + Career + I18N
+  Course.init('forest', 'endless', todaySeed());
+  Terrain.reset();
+  const PInf = Physics.createRider({ isPlayer: true, s: 40, u: 0, initSpeed: 28 });
+  for (let i = 0; i < 420; i++) Physics.stepRider(PInf, { steer: 1, pedal: true }, 1 / 60, i / 60);
+  Terrain.update(PInf.s, PInf.pos[0]);
+  const infTrees = Course.obstaclesNear(PInf.s - 20, PInf.s + 140, PInf.pos[0]);
+  // Aim dead-on at an obstacle to verify smooth dodge with zero ragdoll crash
+  const targetObs = infTrees[0];
+  const RDodge = Physics.createRider({ isPlayer: true, s: Math.max(20, targetObs.s - 6), u: targetObs.x - Course.at(targetObs.s - 6).cx, initSpeed: 28 });
+  RDodge.pos[0] = targetObs.x; RDodge.pos[2] = targetObs.z + 4; RDodge.vel = [0, 0, -28]; RDodge.yaw = 0;
+  for (let i = 0; i < 60; i++) Physics.stepRider(RDodge, { pedal: true }, 1 / 60, i / 60);
+  assert(Math.abs(PInf.u) > 105 && !PInf.crashed && infTrees.length >= 10 && !RDodge.crashed && RDodge.speed > 5,
+    'V4 Endless boundary-free (u=' + Math.round(PInf.u) + 'm, trees=' + infTrees.length + ') & Head-on Dodge-only (speed=' + Math.round(RDodge.speed) + ', crashed=false) OK');
+
   Course.init('town', 'endless', todaySeed());
   const PE = Physics.createRider({ isPlayer: true, s: 1250, u: 0, initSpeed: 26 });
   const RE = AI.spawnPack(2);
@@ -184,6 +213,14 @@ vm.runInContext(`
   const enOk = I18N.t('出发') === 'START' && I18N.t('拍照模式') === 'Photo Mode';
   I18N.setLang('zh');
   assert(enOk && I18N.t('出发') === '出发', 'I18N bilingual ZH/EN switch OK');
+
+  // 7. V4 Browser shortcut guard on J/K & no Camera orbit conflict
+  Input.init(null); Camera.bindInput({ addEventListener() {} });
+  const evJ = dispatchMockKey('keydown', { code: 'KeyJ' });
+  const evK = dispatchMockKey('keydown', { code: 'KeyK' });
+  const evCtrlK = dispatchMockKey('keydown', { code: 'KeyK', ctrlKey: true });
+  assert(evJ.defaultPrevented && evK.defaultPrevented && evCtrlK.defaultPrevented && !Camera.orbit.keys.KeyJ && !Camera.orbit.keys.KeyK,
+    'V4 J/K & Ctrl+K browser shortcut prevention + zero camera orbit hijack OK');
 
   // 6. V4 Sparse Biome-Matched Wildlife (1-3 max, volcano birds only) & Quality Shadow Maps (512 / 1024 / 2048)
   let wildOk = true;
@@ -205,5 +242,5 @@ vm.runInContext(`
     'V4 Sparse Wildlife (high=3, smooth=1, volcano=ravens only) & Quality Shadow Maps (2048/1024/512) OK');
 
   if (failures > 0) process.exit(1);
-  console.log('\\nALL CRAZYBIKE V3 CHECKS PASSED!');
+  console.log('\\nALL CRAZYBIKE V4 CHECKS PASSED!');
 `, ctx);

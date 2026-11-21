@@ -222,14 +222,21 @@ const Props = (() => {
     }
   }
 
-  function emit(centerS, time, quality = 'auto', centerX = null) {
+  function emit(centerS, time, quality = 'auto', centerX = null, camEye = null) {
     const farDist = quality === 'smooth' ? 195 : quality === 'high' ? 285 : 245;
     const s0 = Math.max(0, centerS - 28);
     const s1 = centerS + farDist;
 
-    // 1. Obstacles & biome landmarks (2D infinite grid around rider in Endless!)
+    // 1. Obstacles & biome landmarks (2D infinite grid around rider in Endless + camera lens canopy cull!)
     const obs = Course.obstaclesNear(s0, s1, centerX);
-    for (let i = 0; i < obs.length; i++) emitObstacle(obs[i], time);
+    for (let i = 0; i < obs.length; i++) {
+      const o = obs[i];
+      if (camEye) {
+        const lensR = o.kind === 'pine' ? 3.8 * (o.scale || 1) : o.r + 2.2;
+        if (camEye[1] < o.y + o.h + 1.8 && Math.hypot(o.x - camEye[0], o.z - camEye[2]) < lensR) continue;
+      }
+      emitObstacle(o, time);
+    }
 
     // 2. Organic open-mountainside vegetation, rocks & town overhead banners
     emitBiomeDetails(s0, Math.min(s1, centerS + 215), time, quality, centerX);

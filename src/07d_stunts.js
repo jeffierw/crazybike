@@ -181,7 +181,7 @@ const Stunts = (() => {
             R.trickPitch = 0;
             R.trickYaw = 0;
             R.trickRoll = 0;
-            R.trickPhase = 0;
+            R.trickPhase = 0.22;
             if (R.isPlayer) {
               Sound.playTrick(R.trickCombo);
               stuntEvents.push({ type: 'trick_start', rider: R, trick: ntr, combo: R.trickCombo });
