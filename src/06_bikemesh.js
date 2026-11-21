@@ -822,7 +822,7 @@ fn skinVertex(pos: vec3f, nrm: vec3f, bw: vec4f, baseRow: i32) -> SkinV {
 
 // ================================================================ 2. Instanced Procedural Solid Renderer (Bikes + World Props)
 const Solid = (() => {
-  const MAX_INST = 4200;
+  const MAX_INST = 6400;
   const shapes = {};
   let gfx = null, pipe = null, shPipe = null, instBuf = null;
   const instCPU = new Float32Array(MAX_INST * 16);
