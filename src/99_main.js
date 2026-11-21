@@ -292,8 +292,9 @@ const App = (() => {
 
     for (let i = 0; i < allRiders.length; i++) Particles.emitTire(allRiders[i], simDt, quality);
     Particles.emitAmbient(player.pos, simDt, quality);
+    Particles.emitWaterfalls(player.s, player.pos[0], simDt, quality);
     Particles.step(simDt);
-    Wildlife.step(player.s, simDt, quality);
+    Wildlife.step(player.s, simDt, quality, player.pos[0]);
     Sound.update(player, dt, 'race');
     Music.step(dt, Feel.speedNorm, player.adrenaline / 100, Course.mountain.idx);
     Feel.step(player, dt);
@@ -357,20 +358,20 @@ const App = (() => {
       showBike.susp = Math.sin(time * 2.2) * 0.03 + 0.03;
       BikeMesh.emitRider(showBike, time);
     } else if (state === 'photo') {
-      Terrain.update(player.s);
+      Terrain.update(player.s, player.pos[0]);
       cam = Photo.step(dt, aspect);
       focusPos = [player.pos[0], player.pos[1], player.pos[2] - 12];
-      Props.emit(player.s, time, quality);
+      Props.emit(player.s, time, quality, player.pos[0]);
       Wildlife.emit();
       for (let i = 0; i < allRiders.length; i++) {
         if (Math.abs(allRiders[i].s - player.s) < 250) BikeMesh.emitRider(allRiders[i], time);
       }
       Combat.emitProjectiles();
     } else if (state === 'race' || state === 'pause') {
-      Terrain.update(player.s);
+      Terrain.update(player.s, player.pos[0]);
       cam = Camera.update(player, dt, aspect, Feel, state === 'pause');
       focusPos = [player.pos[0], player.pos[1], player.pos[2] - 14];
-      Props.emit(player.s, time, quality);
+      Props.emit(player.s, time, quality, player.pos[0]);
       Wildlife.emit();
       for (let i = 0; i < allRiders.length; i++) {
         if (Math.abs(allRiders[i].s - player.s) < 250) BikeMesh.emitRider(allRiders[i], time);
@@ -385,13 +386,14 @@ const App = (() => {
       titleRider.helmetCol = pnt.helmet;
       titleRider.upgrades = Object.assign({}, Career.data.upgrades);
 
-      Terrain.update(12);
+      Terrain.update(12, titleRider.pos[0]);
       cam = Camera.titleView(titleRider, dt, aspect, time);
       focusPos = [titleRider.pos[0], titleRider.pos[1], titleRider.pos[2] - 14];
-      Wildlife.step(12, dt, quality);
+      Wildlife.step(12, dt, quality, titleRider.pos[0]);
       Particles.emitAmbient(focusPos, dt, quality);
+      Particles.emitWaterfalls(12, titleRider.pos[0], dt, quality);
       Particles.step(dt);
-      Props.emit(12, time, quality);
+      Props.emit(12, time, quality, titleRider.pos[0]);
       Wildlife.emit();
       BikeMesh.emitRider(titleRider, time);
       for (let i = 0; i < titleRivals.length; i++) BikeMesh.emitRider(titleRivals[i], time);

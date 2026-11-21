@@ -80,7 +80,6 @@ const Camera = (() => {
       if (e.metaKey || e.ctrlKey || e.altKey || (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || ''))) return;
       if (typeof Photo !== 'undefined' && Photo.on) return;
       const c = e.code;
-      if (c === 'KeyI' || c === 'KeyJ' || c === 'KeyK' || c === 'KeyL') { o.keys[c] = true; return; }
       if (e.repeat) return;
       if (c === 'KeyV' && e.shiftKey) { C.cycle(-1); return; }
       const m = /^(?:Digit|Numpad)([1-8])$/.exec(c);
@@ -123,14 +122,7 @@ const Camera = (() => {
   function stepOrbit(dt, isFree) {
     const o = C.orbit;
     o.freeMode = isFree;
-    const kx = (o.keys.KeyL ? 1 : 0) - (o.keys.KeyJ ? 1 : 0);
-    const ky = (o.keys.KeyI ? 1 : 0) - (o.keys.KeyK ? 1 : 0);
-    if (kx || ky) {
-      o.tYaw += kx * 2.1 * dt;
-      o.tPit = clamp(o.tPit + ky * 1.4 * dt, -0.55, 0.88);
-      o.idle = 0;
-    }
-    if (!o.drag && !kx && !ky) {
+    if (!o.drag) {
       o.idle += dt;
       // During active riding, spring look-around smoothly back behind rider after 0.9s
       if (!isFree && o.idle > 0.9) {
@@ -277,9 +269,9 @@ const Camera = (() => {
       const isLow = view === 'low';
       const dist = ((isLow ? 4.80 : preset.dist) + spdNorm * 0.80 + (R.boosting ? 0.60 : 0) + (R.air ? 1.00 : 0)) * o.zoom;
       const gAhead30 = Course.height(R.pos[0] + fx * 30, R.pos[2] + fz * 30);
-      const drop30 = clamp(R.pos[1] - gAhead30, 4, 30);
-      // Exact optical clearance height: H > 1.85 + (dist/30)*(drop30 + 1.85) + clearMargin
-      const opticalMinH = 1.95 + (dist / 30) * (drop30 + 2.0) + (isLow ? 0.35 : 1.05);
+      const drop30 = clamp(R.pos[1] - gAhead30, 4, 52);
+      // Exact optical clearance height: H > 1.85 + (dist/30)*(drop30 + 3.4) + clearMargin so even 60m plunges frame cleanly above helmet!
+      const opticalMinH = 1.95 + (dist / 30) * (drop30 + 3.4) + (isLow ? 0.45 : 1.45);
       const slopeLift = slopeEff * (isLow ? 3.8 : 5.4);
       const baseH = Math.max((isLow ? 2.85 : preset.height) + slopeLift, opticalMinH)
         + (R.air ? 0.65 : 0) - (feel.landDip || 0) + o.pit * 3.4;
@@ -305,11 +297,11 @@ const Camera = (() => {
       wantPos = [ex, ey, ez];
 
       // Aim smoothly down the downhill slope & horizon so rider sits in lower third (-0.38..-0.24)
-      // while BOTH the immediate drop/road ahead AND the scenic canyon panorama remain wide open!
+      // while BOTH the immediate 6-66m drop/road ahead AND the scenic canyon panorama remain wide open!
       const lookDist = preset.look;
       const tx = R.pos[0] + dx * lookDist;
       const tz = R.pos[2] + dz * lookDist;
-      const yRoadAhead = Math.max(Course.height(tx, tz), R.pos[1] - lookDist * 0.78);
+      const yRoadAhead = Math.max(Course.height(tx, tz), R.pos[1] - lookDist * 1.15);
       const slopeLineY = R.pos[1] - slope * lookDist * 0.62;
       const downMix = isLow ? 0.50 : preset.downMix;
       const ty = lerp(slopeLineY + 2.6, yRoadAhead + 4.4, downMix) - (R.air ? 0.45 : 0);

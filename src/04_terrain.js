@@ -32,19 +32,21 @@ const Terrain = (() => {
   }
 
   let gfx = null, vb = null, ib = null, pipe = null;
-  let baseRow = -999999;
+  let baseRow = -999999, baseColX = 0;
 
-  function fillRow(rowIdx, worldRow) {
+  function fillRow(rowIdx, worldRow, colX = 0) {
     const s = Math.max(0, worldRow * DS);
     const z = -s;
     const sp = Course.at(s);
     const lanes = Course.lanesAt(s, sp.seg);
     const ramps = Course.rampsNear(s - 2, s + 2);
+    const ck = Course.creekAt(s);
+    const isEndless = Course.mode.endless;
     let o = rowIdx * NU * STRIDE;
 
     for (let c = 0; c < NU; c++) {
-      const u = U_OFF[c];
-      const x = sp.cx + u;
+      const x = isEndless ? (colX + U_OFF[c]) : (sp.cx + U_OFF[c]);
+      const u = isEndless ? (x - sp.cx) : U_OFF[c];
       const y = Course.height(x, z, sp, lanes, ramps);
 
       // Soft organic worn-trail mask (no hard painted border!) + braided natural shortcut paths
@@ -57,6 +59,10 @@ const Terrain = (() => {
         if (lm > shortTrack) shortTrack = lm;
       }
 
+      const creekM = (ck.active && sp.dropFace < 0.35)
+        ? (1 - smooth(ck.hw * 0.45, ck.hw * 1.15, Math.abs(u - ck.u))) * ck.blend * (1 - smooth(0.25, 0.75, sp.dropFace))
+        : 0;
+
       let rampM = 0;
       for (let k = 0; k < ramps.length; k++) {
         const rm = ramps[k];
@@ -67,13 +73,13 @@ const Terrain = (() => {
       }
 
       const cliffW = u < 0 ? sp.cliffL : sp.cliffR;
-      const cliffChasm = (au > sp.hw + 16.0) ? cliffW * smooth(sp.hw + 16.0, sp.hw + 46.0, au) : 0;
+      const cliffChasm = (!isEndless && au > sp.hw + 16.0) ? cliffW * smooth(sp.hw + 16.0, sp.hw + 46.0, au) : 0;
       const stairOrDrop = sp.dropFace > 0.2 ? -sp.dropFace : (mainTrack > 0.2 ? sp.stairs * mainTrack : cliffChasm);
 
       verts[o++] = x; verts[o++] = y; verts[o++] = z;
       verts[o++] = 0; verts[o++] = 1; verts[o++] = 0;
       verts[o++] = Math.max(mainTrack, shortTrack);
-      verts[o++] = shortTrack;
+      verts[o++] = creekM > 0.02 ? -creekM : shortTrack;
       verts[o++] = rampM;
       verts[o++] = stairOrDrop;
     }
@@ -149,6 +155,7 @@ const Terrain = (() => {
             let wp: vec3f = v.wpos;
             let rawTrack: f32 = saturate(v.mat.x);
             let shortM: f32 = saturate(v.mat.y);
+            let creekM: f32 = saturate(-v.mat.y);
             let rampM: f32 = saturate(v.mat.z);
             let extraM: f32 = v.mat.w;
             let stairM: f32 = saturate(extraM) * rawTrack;
@@ -244,7 +251,22 @@ const Terrain = (() => {
               albedo = mix(vec3f(0.08, 0.08, 0.09), vec3f(0.95, 0.94, 0.92), chk);
             }
 
-            let rough: f32 = clamp(mix(0.86, 0.66, trackM) - specHint * 0.55, 0.12, 0.94);
+            // Sparkling downhill-flowing mountain creek (or molten magma creek on Volcano!)
+            if (creekM > 0.02) {
+              let flowN: f32 = fbm3(vec2f(wp.x * 1.25, wp.z * 0.65 - U.camPos.w * 4.8));
+              let foamBand: f32 = smoothstep(0.06, 0.28, creekM) * (1.0 - smoothstep(0.32, 0.65, creekM));
+              if (biome > 1.5 && biome < 2.5) {
+                let magmaC: vec3f = vec3f(2.2, 0.48, 0.06) * (0.75 + 0.35 * flowN);
+                albedo = mix(albedo, magmaC, saturate(creekM * 1.25));
+              } else {
+                let waterC: vec3f = mix(vec3f(0.07, 0.32, 0.40), vec3f(0.24, 0.58, 0.64), flowN);
+                let foamC: vec3f = mix(waterC, vec3f(0.86, 0.94, 0.98), saturate(foamBand * 0.72 + max(0.0, flowN - 0.56) * 1.3));
+                albedo = mix(albedo, foamC, saturate(creekM * 1.15));
+                specHint = max(specHint, creekM * 0.92);
+              }
+            }
+
+            let rough: f32 = clamp(mix(0.86, 0.66, trackM) - specHint * 0.58, 0.08, 0.94);
             let sh: f32 = sampleShadow(wp, n);
             var col: vec3f = litSurface(albedo, n, wp, rough, sh);
 
@@ -273,25 +295,30 @@ const Terrain = (() => {
 
     reset() {
       baseRow = -999999;
+      baseColX = 0;
     },
 
-    update(centerS) {
+    update(centerS, centerX = null) {
       if (!gfx) return;
       const targetRow = Math.max(0, Math.floor((centerS - 24) / DS));
-      if (targetRow === baseRow) return;
+      const targetColX = (Course.mode.endless && centerX !== null && centerX !== undefined)
+        ? Math.round(centerX / 4) * 4
+        : 0;
+      if (targetRow === baseRow && targetColX === baseColX) return;
       Course.ensureTo((targetRow + NS) * DS + 50);
 
       const delta = targetRow - baseRow;
-      if (delta > 0 && delta < NS - 8) {
+      if (targetColX === baseColX && delta > 0 && delta < NS - 8) {
         const rowFloats = NU * STRIDE;
         verts.copyWithin(0, delta * rowFloats, NS * rowFloats);
-        for (let r = NS - delta; r < NS; r++) fillRow(r, targetRow + r);
+        for (let r = NS - delta; r < NS; r++) fillRow(r, targetRow + r, targetColX);
         computeNormals(NS - delta - 1, NS - 1);
       } else {
-        for (let r = 0; r < NS; r++) fillRow(r, targetRow + r);
+        for (let r = 0; r < NS; r++) fillRow(r, targetRow + r, targetColX);
         computeNormals(0, NS - 1);
       }
       baseRow = targetRow;
+      baseColX = targetColX;
       gfx.updateBuffer(vb, 0, verts);
     },
 

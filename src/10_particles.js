@@ -206,6 +206,7 @@ const Particles = (() => {
             m = m4.mul(m, m4.rotZ(R.roll + (R.trickRoll || 0)));
 
             const pal = INK_PALETTES[Course.mountain.idx % INK_PALETTES.length];
+            const shift = Math.max(0, (R.trickCombo || 1) - 1);
             const spread = (R.trickType === 'nohander' && R.trickPhase > 0.1) ? 0.52 * R.trickPhase : 0;
             const pL = m4.tp(m, [-0.48 - spread, 1.18 + spread * 1.1, -0.35]);
             const pR = m4.tp(m, [ 0.48 + spread, 1.18 + spread * 1.1, -0.35]);
@@ -215,14 +216,14 @@ const Particles = (() => {
             const alpha = R.trickActive ? 0.90 : 0.62;
             const width = R.trickActive ? 0.56 : 0.30;
 
-            pushRibbonNode(0, pL, sideL, pal[0], alpha, width);
-            pushRibbonNode(1, pR, sideR, pal[1], alpha, width);
+            pushRibbonNode(0, pL, sideL, pal[shift % 3], alpha, width);
+            pushRibbonNode(1, pR, sideR, pal[(shift + 1) % 3], alpha, width);
 
             // Bold dark sumi-ink accent brush stroke trailing off rear tire during tricks!
             if (R.trickActive) {
               const pT = m4.tp(m, [0, 0.48, 0.72]);
               const sideV = v3.norm(m4.td(m, [1, 0, 0]));
-              pushRibbonNode(2, pT, sideV, pal[2], 0.80, 0.44);
+              pushRibbonNode(2, pT, sideV, pal[(shift + 2) % 3], 0.80, 0.44);
             }
 
             // Physical spray-paint / ink droplets breaking away from the brush strokes!
@@ -242,22 +243,61 @@ const Particles = (() => {
         }
       }
 
-      // 2. Realistic sunlit rooster-tail dust plumes & drift gravel spray!
+      // 2. Realistic water splash in mountain creeks OR sunlit rooster-tail dust plumes!
       if (R.air || R.speed < 5) return;
       const m = Course.mountain;
       const fx = -Math.sin(R.yaw), fz = -Math.cos(R.yaw);
       const bx = R.pos[0] - fx * 0.72, by = R.pos[1] + 0.14, bz = R.pos[2] - fz * 0.72;
-      const rate = (R.skid > 0 ? 64 : 24) * sat(R.speed / 22) * qMul;
+      const rate = (R.inCreek ? 72 : R.skid > 0 ? 64 : 24) * sat(R.speed / 22) * qMul;
       if (Math.random() < rate * dt) {
-        const spread = R.skid > 0 ? 2.8 : 1.1;
+        if (R.inCreek && m.idx !== 2) {
+          for (let k = 0; k < 2; k++) {
+            const sgn = k === 0 ? -1 : 1;
+            spawn(
+              bx + sgn * 0.22, by + 0.06, bz,
+              sgn * (1.8 + Math.random() * 2.4) - fx * 1.4,
+              2.2 + Math.random() * 2.6,
+              -fz * 1.6 + (Math.random() - 0.5) * 1.4,
+              [0.84, 0.95, 1.0], 0.74, 0.16, 0.68, 0.40 + Math.random() * 0.24, 0.55
+            );
+          }
+        } else {
+          const spread = R.skid > 0 ? 2.8 : 1.1;
+          spawn(
+            bx + (Math.random() - 0.5) * 0.30, by, bz + (Math.random() - 0.5) * 0.30,
+            -fx * (2.2 + Math.random() * 2.4) + (Math.random() - 0.5) * spread,
+            1.1 + Math.random() * (R.skid > 0 ? 3.0 : 1.4),
+            -fz * (2.2 + Math.random() * 2.4) + (Math.random() - 0.5) * spread,
+            R.inCreek ? [1.8, 0.55, 0.10] : m.dustCol, R.skid > 0 ? 0.58 : 0.32,
+            R.skid > 0 ? 0.34 : 0.22, R.skid > 0 ? 2.1 : 1.35,
+            0.52 + Math.random() * 0.38, 0.09
+          );
+        }
+      }
+    },
+
+    // Sunlit mist & spray rising from cascading cliff waterfalls
+    emitWaterfalls(centerS, centerX, dt, quality = 'auto') {
+      if (quality === 'smooth') return;
+      const drops = Course.dropsNear(Math.max(0, centerS - 18), centerS + 165);
+      const bi = Course.mountain.idx;
+      const prob = quality === 'high' ? 1.0 : quality === 'balanced' ? 0.55 : 0.8;
+      for (let i = 0; i < drops.length; i++) {
+        const dr = drops[i];
+        const ck = Course.creekAt(dr.s);
+        if (!dr.hasWaterfall && !ck.active) continue;
+        if (Math.random() > 22 * dt * prob) continue;
+        const spTop = Course.at(dr.s);
+        const u = ck.active ? ck.u : dr.wfSide * (spTop.hw * 0.62 + 4.5);
+        const wx = spTop.cx + u;
+        if (centerX !== null && Math.abs(wx - centerX) > 130) continue;
+        const wz = -(dr.s + dr.faceLen);
+        const wy = Course.height(wx, wz) + 0.6;
+        const mistCol = bi === 2 ? [1.7, 0.52, 0.12] : [0.88, 0.96, 1.0];
         spawn(
-          bx + (Math.random() - 0.5) * 0.30, by, bz + (Math.random() - 0.5) * 0.30,
-          -fx * (2.2 + Math.random() * 2.4) + (Math.random() - 0.5) * spread,
-          1.1 + Math.random() * (R.skid > 0 ? 3.0 : 1.4),
-          -fz * (2.2 + Math.random() * 2.4) + (Math.random() - 0.5) * spread,
-          m.dustCol, R.skid > 0 ? 0.58 : 0.32,
-          R.skid > 0 ? 0.34 : 0.22, R.skid > 0 ? 2.1 : 1.35,
-          0.52 + Math.random() * 0.38, 0.09
+          wx + (Math.random() - 0.5) * 4.5, wy, wz + (Math.random() - 0.5) * 2.4,
+          (Math.random() - 0.5) * 2.2, 2.0 + Math.random() * 2.8, (Math.random() - 0.5) * 2.2,
+          mistCol, bi === 2 ? 0.72 : 0.42, 0.65, 2.8, 0.95 + Math.random() * 0.6, -0.04
         );
       }
     },

@@ -86,9 +86,10 @@ const Props = (() => {
     }
   }
 
-  // Organic open-mountainside biome scatter (sagebrush, boulders, fallen logs, fumaroles, hillside banners) — ZERO narrow fence boxes!
-  function emitBiomeDetails(s0, s1, time, quality) {
+  // Organic open-mountainside biome scatter (infinite-X in Endless!) — zero narrow fence boxes!
+  function emitBiomeDetails(s0, s1, time, quality, centerX = null) {
     const bi = Course.mountain.idx;
+    const isEndless = Course.mode.endless && centerX !== null && centerX !== undefined;
     const step = quality === 'smooth' ? 28 : quality === 'balanced' ? 18 : quality === 'high' ? 11 : 14;
     const i0 = Math.max(2, Math.floor(s0 / step));
     const i1 = Math.floor(s1 / step);
@@ -98,8 +99,8 @@ const Props = (() => {
       const sp = Course.at(s);
       const z = -s;
 
-      // Festive overhead street banners in Hillside Town
-      if (bi === 3 && (i % 5 === 2) && sp.cliffL < 0.25 && sp.cliffR < 0.25) {
+      // Festive overhead street banners in Hillside Town (around guide line)
+      if (bi === 3 && (i % 5 === 2) && (isEndless || (sp.cliffL < 0.25 && sp.cliffR < 0.25))) {
         const xL = sp.cx - sp.hw - 2.4, xR = sp.cx + sp.hw + 2.4;
         const yTop = Math.max(Course.height(xL, z), Course.height(xR, z)) + 6.8;
         Solid.pushLimb([xL, yTop, z], [xR, yTop, z], 0.05, [0.22, 0.22, 0.24], 0.5);
@@ -109,18 +110,26 @@ const Props = (() => {
         }
       }
 
-      // Natural mountainside vegetation & rocky outcrops distributed freely across the wide open slope (u in ±14..58m)
+      // Natural mountainside vegetation & rocky outcrops across wide open slope (or centered on player X in Endless!)
       const hA = hash1(i * 19.3 + bi * 7.1);
       const hB = hash1(i * 37.7 + bi * 13.7);
-      const side = hA < 0.5 ? -1 : 1;
-      const u = side * (16 + hB * 40);
-      if ((side < 0 && sp.cliffL > 0.30) || (side > 0 && sp.cliffR > 0.30)) continue;
-      const x = sp.cx + u;
+      let x;
+      if (isEndless) {
+        const band = Math.floor((centerX - 95) / 28) * 28;
+        const colIdx = i % 7;
+        x = band + colIdx * 28 + (hash1(i * 41.3 + colIdx) - 0.5) * 24;
+        const ck = Course.creekAt(s);
+        if (Math.abs(x - sp.cx) < 10 || (ck.active && Math.abs(x - (sp.cx + ck.u)) < ck.hw + 2)) continue;
+      } else {
+        const side = hA < 0.5 ? -1 : 1;
+        const u = side * (16 + hB * 40);
+        if ((side < 0 && sp.cliffL > 0.30) || (side > 0 && sp.cliffR > 0.30)) continue;
+        x = sp.cx + u;
+      }
       const y = Course.height(x, z);
       const sc = 0.75 + hash1(i * 53.1) * 0.95;
 
       if (bi === 0) {
-        // Red Rock Canyon: dry sagebrush tufts + stepped sandstone outcrops
         if (hA > 0.35) {
           Solid.pushTRS('sphere', [x, y + 0.45 * sc, z], i, 0, 0, [1.55 * sc, 0.92 * sc, 1.35 * sc], [0.28, 0.34, 0.18], 0.90);
           Solid.pushTRS('sphere', [x + 0.6 * sc, y + 0.32 * sc, z - 0.3 * sc], i + 1, 0, 0, [1.1 * sc, 0.70 * sc, 1.0 * sc], [0.34, 0.38, 0.20], 0.90);
@@ -128,21 +137,18 @@ const Props = (() => {
           Solid.pushTRS('box', [x, y + 0.7 * sc, z], hB * 3, 0.08, 0.06, [3.2 * sc, 1.5 * sc, 2.4 * sc], [0.58, 0.24, 0.13], 0.88);
         }
       } else if (bi === 1) {
-        // Pine Forest: mossy fallen timber logs & lush fern clusters
         if (hA > 0.45) {
           Solid.pushTRS('sphere', [x, y + 0.38 * sc, z], i, 0, 0, [1.85 * sc, 0.82 * sc, 1.65 * sc], [0.14, 0.34, 0.12], 0.86);
         } else {
           Solid.pushTRS('cyl', [x, y + 0.32 * sc, z], hB * 3, PI * 0.5, 0.12, [0.55 * sc, 3.8 * sc, 0.55 * sc], [0.28, 0.18, 0.11], 0.90);
         }
       } else if (bi === 2) {
-        // Volcano: jagged obsidian outcrops & warm glowing ground fumaroles
         Solid.pushTRS('cone', [x, y + 1.1 * sc, z], i, 0.1, 0.08, [1.8 * sc, 2.8 * sc, 1.6 * sc], [0.12, 0.10, 0.11], 0.82);
         if (hB > 0.65) {
           const g = 0.85 + 0.2 * Math.sin(time * 3.8 + i);
           Solid.pushTRS('sphere', [x + 0.6, y + 0.25, z], 0, 0, 0, [0.75 * g, 0.35 * g, 0.75 * g], [1.6, 0.38, 0.06], -1.0);
         }
       } else {
-        // Hillside Town: Mediterranean cypress trees & stone garden walls
         if (hA > 0.4) {
           Solid.pushTRS('cone', [x, y + 2.4 * sc, z], i, 0, 0, [1.15 * sc, 5.2 * sc, 1.15 * sc], [0.12, 0.28, 0.14], 0.84);
         } else {
@@ -152,19 +158,87 @@ const Props = (() => {
     }
   }
 
-  function emit(centerS, time, quality = 'auto') {
+  // Animated cascading cliff waterfalls (alpine/canyon whitewater or glowing Volcano lava falls!)
+  function emitWaterfalls(s0, s1, time) {
+    const drops = Course.dropsNear(s0, s1);
+    const bi = Course.mountain.idx;
+    const isLava = bi === 2;
+    const sheetCol = isLava ? [1.9, 0.42, 0.06] : [0.70, 0.88, 0.96];
+    const sheetRough = isLava ? -1.0 : 0.14;
+    const foamCol = isLava ? [2.2, 0.74, 0.16] : [0.95, 0.98, 1.00];
+    const foamRough = isLava ? -1.0 : 0.26;
+
+    for (let i = 0; i < drops.length; i++) {
+      const dr = drops[i];
+      const ck = Course.creekAt(dr.s);
+      if (!dr.hasWaterfall && !ck.active) continue;
+      const spTop = Course.at(dr.s);
+      const u = ck.active ? ck.u : dr.wfSide * (spTop.hw * 0.62 + 4.5);
+      const wx = spTop.cx + u;
+      const w = ck.active ? ck.hw * 1.1 : dr.wfWidth;
+      const topZ = -(dr.s + 0.4);
+      const botZ = -(dr.s + dr.faceLen);
+      const topY = Course.height(wx, topZ);
+      const botY = Course.height(wx, botZ);
+      if (topY - botY < 4.5) continue;
+
+      // Primary cascading sheet down the cliff face
+      Solid.pushLimb([wx, topY + 0.3, topZ], [wx, botY - 0.3, botZ], 0.55, sheetCol, sheetRough, 'box', w * 0.52);
+
+      // Animated falling streaks & whitewater ribbons
+      for (let k = 0; k < 5; k++) {
+        const ph = fract(time * 1.35 + k * 0.20 + dr.id * 0.17);
+        const fx = wx + ((k - 2) / 2.2) * (w * 0.36);
+        const fy = lerp(topY + 0.1, botY + 0.4, ph);
+        const fz = lerp(topZ, botZ, ph) + 0.45;
+        Solid.pushTRS('box', [fx, fy, fz], 0, 0.42, 0, [w * 0.22, 2.8 + dr.dropH * 0.08, 0.45], foamCol, foamRough);
+      }
+
+      // Boiling foam plunge pool cushion at cliff bottom
+      const pPulse = 0.92 + 0.12 * Math.sin(time * 6.5 + dr.id);
+      Solid.pushTRS('sphere', [wx, botY + 0.45, botZ - 0.6], dr.id, 0, 0, [w * 1.55 * pPulse, 1.35, 3.8 * pPulse], foamCol, foamRough);
+    }
+  }
+
+  // Optional slalom guide poles & wind-fluttering pennants (pure visual freeride aid — zero barriers!)
+  function emitGuideFlags(s0, s1, time) {
+    const STEP = 52;
+    const i0 = Math.max(1, Math.floor(s0 / STEP));
+    const i1 = Math.floor(s1 / STEP);
+    for (let i = i0; i <= i1; i++) {
+      const s = i * STEP;
+      if (!Course.mode.endless && Math.abs(s - Course.finishS) < 28) continue;
+      if (s < 32) continue;
+      const sp = Course.at(s);
+      if (sp.dropFace > 0.15 || sp.dropEdge > 0.15) continue;
+      const side = (i & 1) ? 1 : -1;
+      const gx = sp.cx + side * Math.min(sp.hw * 0.85, 11.5);
+      const gz = -s;
+      const gy = Course.height(gx, gz);
+      const flutter = Math.sin(time * 5.6 + i * 1.3) * 0.18;
+      const flagCol = (i % 3 === 0) ? [0.96, 0.68, 0.12] : (i & 1) ? [0.88, 0.24, 0.14] : [0.16, 0.56, 0.82];
+      Solid.pushLimb([gx, gy - 0.2, gz], [gx, gy + 3.1, gz], 0.065, [0.86, 0.86, 0.84], 0.42);
+      Solid.pushTRS('box', [gx - side * 0.34, gy + 2.75, gz], flutter, 0, 0, [0.76, 0.44, 0.06], flagCol, 0.48);
+    }
+  }
+
+  function emit(centerS, time, quality = 'auto', centerX = null) {
     const farDist = quality === 'smooth' ? 195 : quality === 'high' ? 285 : 245;
     const s0 = Math.max(0, centerS - 28);
     const s1 = centerS + farDist;
 
-    // 1. Obstacles & biome landmarks
-    const obs = Course.obstaclesNear(s0, s1);
+    // 1. Obstacles & biome landmarks (2D infinite grid around rider in Endless!)
+    const obs = Course.obstaclesNear(s0, s1, centerX);
     for (let i = 0; i < obs.length; i++) emitObstacle(obs[i], time);
 
-    // 2. Organic open-mountainside vegetation, rocks & town overhead banners (no narrow fence borders!)
-    emitBiomeDetails(s0, Math.min(s1, centerS + 215), time, quality);
+    // 2. Organic open-mountainside vegetation, rocks & town overhead banners
+    emitBiomeDetails(s0, Math.min(s1, centerS + 215), time, quality, centerX);
 
-    // 3. Twin high-visibility flags + rustic wooden supports on every kicker ramp
+    // 3. Cascading cliff waterfalls & optional slalom guide poles
+    emitWaterfalls(s0, Math.min(s1, centerS + 225), time);
+    emitGuideFlags(s0, Math.min(s1, centerS + 205), time);
+
+    // 4. Twin high-visibility flags + rustic wooden supports on every kicker ramp
     const ramps = Course.rampsNear(s0, s1);
     for (let i = 0; i < ramps.length; i++) {
       const rm = ramps[i];
@@ -182,7 +256,7 @@ const Props = (() => {
       }
     }
 
-    // 4. Mega Downhill Cliff Drop-Offs (13m–26m plunges!): rugged North-Shore wooden launch lip + twin tall freeride drop flags!
+    // 5. Random-Height Cliff Drop-Offs (6m-66m!): rugged North-Shore wooden launch lip + twin tall drop flags!
     const drops = Course.dropsNear(s0, s1);
     for (let i = 0; i < drops.length; i++) {
       const dr = drops[i];
@@ -190,18 +264,17 @@ const Props = (() => {
       const z = -(dr.s - 0.6);
       const halfSpan = Math.min(sp.hw - 0.6, 8.6);
       const yMid = Course.height(sp.cx, z);
-      // Heavy North-Shore timber takeoff beam & vertical trestle posts framing the sheer drop brink
       Solid.pushLimb([sp.cx - halfSpan, yMid + 0.05, z], [sp.cx + halfSpan, yMid + 0.05, z], 0.26, [0.48, 0.30, 0.15], 0.82, 'box', 1.15);
+      const poleH = dr.dropH >= 32 ? 5.6 : 4.4;
       for (const side of [-1, 1]) {
         const fx = sp.cx + side * (halfSpan + 0.6);
         const fy = Course.height(fx, z);
-        // Tall weathered drop-zone flagpoles visible 100m up the slope!
-        Solid.pushLimb([fx, fy - 0.5, z], [fx, fy + 4.4, z], 0.13, [0.20, 0.20, 0.22], 0.45);
-        Solid.pushTRS('box', [fx - side * 0.55, fy + 3.8, z], 0, 0, 0, [1.15, 0.72, 0.10], [0.96, 0.58, 0.10], 0.38);
+        Solid.pushLimb([fx, fy - 0.5, z], [fx, fy + poleH, z], 0.13, [0.20, 0.20, 0.22], 0.45);
+        Solid.pushTRS('box', [fx - side * 0.55, fy + poleH - 0.6, z], 0, 0, 0, [1.20, 0.76, 0.10], dr.dropH >= 32 ? [0.96, 0.34, 0.10] : [0.96, 0.58, 0.10], 0.38);
       }
     }
 
-    // 5. Start gate (s=18) & Finish arch (s=finishS)
+    // 6. Start gate (s=18) & Finish arch (s=finishS)
     if (s0 <= 26 && s1 >= 12) emitArch(18, [0.16, 0.56, 0.82], true);
     if (!Course.mode.endless && s0 <= Course.finishS + 20 && s1 >= Course.finishS - 20) {
       emitArch(Course.finishS, [0.92, 0.30, 0.10], false);
