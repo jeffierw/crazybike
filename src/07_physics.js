@@ -50,9 +50,11 @@ const Physics = (() => {
       // Adrenaline, Tricks & Boost (used heavily in Step 5)
       adrenaline: 25,   // 0..100
       boosting: false,
-      trickType: null,  // 'superman' | 'whip' | 'backflip' | 'spin360'
+      idleMode: false,
+      trickType: null,  // 'superman' | 'nohander' | 'cancan' | 'dblcancan' | 'nacnac' | 'tabletop' | 'whip' | 'backflip' | 'spin'
       trickPhase: 0,    // 0..1+ animation depth
       trickHeld: false,
+      trickActive: false,
       trickScore: 0,
       trickCombo: 0,
       trickYaw: 0,
@@ -270,9 +272,9 @@ const Physics = (() => {
       const rx = Math.cos(R.yaw), rz = -Math.sin(R.yaw);
 
       // Slope gravity acceleration projected onto horizontal plane (+nrm tilts downhill!)
-      const grav = 24.5;
-      let ax = nrm[0] * grav * 1.28;
-      let az = nrm[2] * grav * 1.28;
+      const grav = 27.5;
+      let ax = nrm[0] * grav * 1.26;
+      let az = nrm[2] * grav * 1.26;
 
       // Pedaling + Adrenaline boost thrust
       const boostMul = R.boosting ? 1.95 : 1.0;
@@ -325,16 +327,18 @@ const Physics = (() => {
       const slopeVy = (nextGY - prevY) / Math.max(dt, 1e-4);
 
       if (!R.air) {
-        // Detect launching cleanly off a kicker lip or steep cliff drop!
+        // Detect launching cleanly off a kicker lip, vertical step-down rock ledge (断面), or steep drop!
         const dropRate = R.vel[1] - slopeVy;
-        if ((R.onRamp && slopeVy < -3.0 && hSpeed > 13) || (dropRate > 7.5 && hSpeed > 14)) {
+        const onDropLedge = surf.dropEdge > 0.35 && slopeVy < -3.6 && hSpeed > 11;
+        if ((R.onRamp && slopeVy < -2.6 && hSpeed > 12) || onDropLedge || (dropRate > 7.2 && hSpeed > 13)) {
           R.air = true;
           R.airTime = 0;
           R.airStartY = prevY;
           R.airPeak = prevY;
           R.airStartS = s;
-          // Preserve upward ramp launch velocity + natural kicker pop
-          R.vel[1] = Math.max(R.vel[1], R.onRamp ? clamp(hSpeed * 0.36, 4.5, 11.5) : 1.5);
+          // Preserve upward ramp launch velocity + natural kicker/drop pop for awesome hangtime
+          const popV = R.onRamp ? clamp(hSpeed * 0.40, 5.2, 12.8) : onDropLedge ? clamp(hSpeed * 0.22, 3.2, 6.8) : 1.8;
+          R.vel[1] = Math.max(R.vel[1], popV);
           R.pos[1] = prevY + R.vel[1] * dt;
           emit({ type: 'launch', rider: R, speed: hSpeed });
         } else {
@@ -416,10 +420,15 @@ const Physics = (() => {
     R.suspV += suspF * dt;
     R.susp = clamp(R.susp + R.suspV * dt, -0.07, 0.28);
 
-    // Track corridor soft-bank containment so riders never escape the canyon
+    // Track corridor containment + sheer cliff plunge detection
     R.s = Math.max(0, -R.pos[2]);
     const spNow = Course.at(R.s);
     R.u = R.pos[0] - spNow.cx;
+    const cliffSide = R.u < 0 ? spNow.cliffL : spNow.cliffR;
+    if (cliffSide > 0.35 && Math.abs(R.u) > spNow.hw + 7.5 && R.pos[1] < spNow.baseY - 12.0) {
+      triggerCrash(R, 'cliff', sign(R.u) * 4, 0, R.lastHitBy);
+      return;
+    }
     const maxU = spNow.hw + 24;
     if (Math.abs(R.u) > maxU) {
       const sgn = sign(R.u);
