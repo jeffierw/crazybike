@@ -14,9 +14,9 @@ const Camera = (() => {
   ];
 
   const PRESETS = {
-    a: { dist: 4.55, height: 2.75, look: 16, baseFov: 70, downDrop: 0.68 },
-    b: { dist: 5.25, height: 3.30, look: 18, baseFov: 68, downDrop: 0.72 },
-    c: { dist: 6.45, height: 4.05, look: 21, baseFov: 73, downDrop: 0.76 },
+    a: { dist: 5.05, height: 3.75, look: 28, baseFov: 72, downMix: 0.56 },
+    b: { dist: 5.65, height: 4.30, look: 30, baseFov: 70, downMix: 0.58 },
+    c: { dist: 6.75, height: 5.10, look: 34, baseFov: 75, downMix: 0.62 },
   };
 
   const C = {
@@ -192,7 +192,11 @@ const Camera = (() => {
     const fx = -Math.sin(R.yaw), fz = -Math.cos(R.yaw);
     const rx =  Math.cos(R.yaw), rz = -Math.sin(R.yaw);
     const spHere = Course.at(R.s);
-    const slope = spHere.slope || 0.34;
+    const slope = spHere.slope || 0.42;
+    const gHereY = Course.height(R.pos[0], R.pos[2]);
+    const gAhead24 = Course.height(R.pos[0] + fx * 24, R.pos[2] + fz * 24);
+    const terrainDropRate = clamp((gHereY - gAhead24) / 24, 0.22, 0.92);
+    const slopeEff = clamp(Math.max(slope, terrainDropRate * 0.88), 0.25, 0.88);
     let wantPos, wantTgt, wantFov, wantRoll = 0, wantClear = 0.45, near = 0.24;
 
     if (R.crashed) {
@@ -216,80 +220,100 @@ const Camera = (() => {
       ];
       wantFov = 64 * PI / 180;
     } else if (view === 'fpv') {
-      // Helmet Goggles FPV: mounted squarely at front of goggles (ahead of shoulders/neck!), showing gloves, bars, fork & trail!
+      // Helmet Goggles FPV: slope-adaptive downward tilt looking cleanly down steep slopes & cliff plunges!
       const comp = clamp(R.susp || 0, -0.07, 0.26);
       const crouch = (R.charge || 0) * 0.22 + comp * 0.62 + (R.boosting ? 0.12 : 0);
       near = 0.08;
       wantClear = 0.40;
-      const eyeH = 1.68 - crouch * 1.05;
-      const eyeFwd = 0.24; // cleanly forward of helmet front / shoulders so torso is behind camera!
+      const eyeH = 1.72 - crouch * 1.00;
+      const eyeFwd = 0.25;
       wantPos = [R.pos[0] + fx * eyeFwd, R.pos[1] + eyeH, R.pos[2] + fz * eyeFwd];
       const ly = R.yaw - o.yaw;
       const lfx = -Math.sin(ly), lfz = -Math.cos(ly);
-      const pitchLook = clamp(R.pitch * 0.68 - 0.22 + o.pit, -0.82, 0.60);
+      const pitchLook = clamp(R.pitch * 0.52 - 0.14 - slopeEff * 0.58 + o.pit, -0.96, 0.42);
       wantTgt = [
-        wantPos[0] + lfx * 18 * Math.cos(pitchLook),
-        wantPos[1] + Math.sin(pitchLook) * 18,
-        wantPos[2] + lfz * 18 * Math.cos(pitchLook),
+        wantPos[0] + lfx * 22 * Math.cos(pitchLook),
+        wantPos[1] + Math.sin(pitchLook) * 22,
+        wantPos[2] + lfz * 22 * Math.cos(pitchLook),
       ];
       wantFov = (86 + spdNorm * 13 + (R.boosting ? 7 : 0)) * PI / 180;
       wantRoll = R.roll * 0.34;
     } else if (view === 'fork') {
-      // Front Fork Low Cam: riding right above the dual-crown fork & spinning knobby front tire!
+      // Front Fork Low Cam: slope-adaptive downward aim directly down the trail over the front wheel!
       near = 0.12;
-      wantClear = 0.28;
+      wantClear = 0.30;
       const comp = clamp(R.susp || 0, -0.07, 0.26);
-      wantPos = [R.pos[0] + fx * 0.28, R.pos[1] + 0.96 - comp * 0.55, R.pos[2] + fz * 0.28];
-      wantTgt = [R.pos[0] + fx * 16, R.pos[1] + 0.55 - slope * 8.5, R.pos[2] + fz * 16];
+      wantPos = [R.pos[0] + fx * 0.30, R.pos[1] + 1.06 - comp * 0.50, R.pos[2] + fz * 0.30];
+      const forkAheadY = Math.max(Course.height(R.pos[0] + fx * 20, R.pos[2] + fz * 20), R.pos[1] - 18);
+      wantTgt = [R.pos[0] + fx * 20, lerp(R.pos[1] + 0.35, forkAheadY + 1.15, 0.78), R.pos[2] + fz * 20];
       wantFov = (84 + spdNorm * 14 + (R.boosting ? 8 : 0)) * PI / 180;
       wantRoll = R.roll * 0.42;
     } else if (view === 'left' || view === 'right' || view === 'front' || view === 'high') {
-      // Multi-angle action rigs (smoothly switchable via V / 5-8)
-      let azOff = 0, dist = 6.0, h = 2.0, tf = 3.0, th = 1.1, fovDeg = 62;
-      if (view === 'high')  { azOff = 0;    dist = 8.6; h = 6.8; tf = 15.0; th = 0.6; fovDeg = 66; }
-      if (view === 'left')  { azOff = -1.25; dist = 5.4; h = 1.75; tf = 2.6; th = 1.05; fovDeg = 58; }
-      if (view === 'right') { azOff =  1.25; dist = 5.4; h = 1.75; tf = 2.6; th = 1.05; fovDeg = 58; }
-      if (view === 'front') { azOff =  PI;   dist = 5.8; h = 1.65; tf = -0.8; th = 1.10; fovDeg = 58; }
+      // Multi-angle action rigs — ALL slope-adaptive so steep drops & terrain ahead frame cleanly!
+      let azOff = 0, dist = 6.0, h = 2.4, tf = 5.0, th = 0.85, fovDeg = 64;
+      if (view === 'high')  { azOff = 0;     dist = 9.2; h = 8.4 + slopeEff * 5.6; tf = 24.0; th = 0.5; fovDeg = 68; }
+      if (view === 'left')  { azOff = -1.20; dist = 5.6; h = 2.5 + slopeEff * 3.4; tf = 7.5;  th = 0.8; fovDeg = 62; }
+      if (view === 'right') { azOff =  1.20; dist = 5.6; h = 2.5 + slopeEff * 3.4; tf = 7.5;  th = 0.8; fovDeg = 62; }
+      if (view === 'front') { azOff =  PI;   dist = 6.0; h = 2.1 + slopeEff * 2.4; tf = -1.2; th = 1.05; fovDeg = 60; }
       const ang = R.yaw + azOff + o.yaw;
       const d = dist * o.zoom;
-      wantPos = [R.pos[0] + Math.sin(ang) * d, R.pos[1] + h + o.pit * 3.0 + (R.air ? 0.4 : 0), R.pos[2] + Math.cos(ang) * d];
-      wantTgt = [R.pos[0] + fx * tf, R.pos[1] + th - (view === 'high' ? slope * 5.0 : 0), R.pos[2] + fz * tf];
+      const ex = R.pos[0] + Math.sin(ang) * d;
+      const ez = R.pos[2] + Math.cos(ang) * d;
+      const eyGround = Course.height(ex, ez);
+      const ey = Math.max(R.pos[1] + h + o.pit * 3.2 + (R.air ? 0.5 : 0), eyGround + (view === 'high' ? 5.5 : 1.75));
+      wantPos = [ex, ey, ez];
+      const tx = R.pos[0] + fx * tf, tz = R.pos[2] + fz * tf;
+      const tGround = Math.max(Course.height(tx, tz), R.pos[1] - Math.abs(tf) * 0.82);
+      const ty = view === 'front'
+        ? R.pos[1] + th
+        : lerp(R.pos[1] + th, tGround + 1.35, view === 'high' ? 0.78 : 0.62);
+      wantTgt = [tx, ty, tz];
       wantFov = (fovDeg + spdNorm * 8) * PI / 180;
       wantRoll = view === 'front' ? -R.roll * 0.12 : R.roll * 0.08;
     } else {
-      // Default CHASE & LOW views: elevated downward downhill pitch so rider sits in LOWER 1/3, NEVER blocking the road ahead!
+      // Default CHASE & LOW views: optically guaranteed over-the-helmet downhill framing!
+      // Camera elevation scales directly with the sampled slope + cliff drop ahead so the road 15..60m ahead
+      // ALWAYS sits clearly ABOVE the rider's helmet while the rider anchors the lower third!
       const isLow = view === 'low';
-      const dist = ((isLow ? 4.35 : preset.dist) + spdNorm * 0.85 + (R.boosting ? 0.65 : 0) + (R.air ? 0.95 : 0)) * o.zoom;
-      const height = (isLow ? 2.15 : preset.height) + (R.air ? 0.55 : 0) - (feel.landDip || 0) + o.pit * 3.2;
+      const dist = ((isLow ? 4.80 : preset.dist) + spdNorm * 0.80 + (R.boosting ? 0.60 : 0) + (R.air ? 1.00 : 0)) * o.zoom;
+      const gAhead30 = Course.height(R.pos[0] + fx * 30, R.pos[2] + fz * 30);
+      const drop30 = clamp(R.pos[1] - gAhead30, 4, 30);
+      // Exact optical clearance height: H > 1.85 + (dist/30)*(drop30 + 1.85) + clearMargin
+      const opticalMinH = 1.95 + (dist / 30) * (drop30 + 2.0) + (isLow ? 0.35 : 1.05);
+      const slopeLift = slopeEff * (isLow ? 3.8 : 5.4);
+      const baseH = Math.max((isLow ? 2.85 : preset.height) + slopeLift, opticalMinH)
+        + (R.air ? 0.65 : 0) - (feel.landDip || 0) + o.pit * 3.4;
 
-      // Subtle track-spine & turn-apex side lead so upcoming curves, ramps & cliffs read early!
-      const spAhead = Course.at(R.s + 16);
-      const lookDirX = lerp(fx, clamp((spAhead.cx - R.pos[0]) * 0.04, -0.5, 0.5), 0.24);
+      // Subtle track-spine & turn-apex side lead so upcoming curves, ramps & cliff lines read early!
+      const spAhead = Course.at(R.s + 24);
+      const lookDirX = lerp(fx, clamp((spAhead.cx - R.pos[0]) * 0.035, -0.46, 0.46), 0.22);
       const lookDirZ = fz;
       const dl = Math.hypot(lookDirX, lookDirZ) || 1;
       let dx = lookDirX / dl, dz = lookDirZ / dl;
-      // Apply look-around yaw during chase
       if (Math.abs(o.yaw) > 0.002) {
         const cy = Math.cos(o.yaw), sy = Math.sin(o.yaw);
         const ndx = dx * cy - dz * sy, ndz = dx * sy + dz * cy;
         dx = ndx; dz = ndz;
       }
 
-      // Slight lateral offset into turns so rider silhouette never covers the apex!
       const sideLead = clamp(-(R.steer || 0) * 0.55, -0.65, 0.65);
-      wantPos = [
-        R.pos[0] - dx * dist + rx * sideLead,
-        R.pos[1] + height,
-        R.pos[2] - dz * dist + rz * sideLead,
-      ];
-      // Look FAR downhill along the slope so the bike sits cleanly in the lower 1/3 of screen!
+      const ex = R.pos[0] - dx * dist + rx * sideLead;
+      const ez = R.pos[2] - dz * dist + rz * sideLead;
+      // Ensure camera always floats generously ABOVE the uphill slope directly behind the rider!
+      const yBehind = Course.height(ex, ez);
+      const ey = Math.max(R.pos[1] + baseH, yBehind + (isLow ? 2.15 : 3.45));
+      wantPos = [ex, ey, ez];
+
+      // Aim smoothly down the downhill slope & horizon so rider sits in lower third (-0.38..-0.24)
+      // while BOTH the immediate drop/road ahead AND the scenic canyon panorama remain wide open!
       const lookDist = preset.look;
-      const slopeDrop = slope * lookDist * (isLow ? 0.48 : preset.downDrop);
-      wantTgt = [
-        R.pos[0] + dx * lookDist,
-        R.pos[1] + (isLow ? 1.15 : 1.05) - slopeDrop * 0.55 - (R.air ? 0.45 : 0),
-        R.pos[2] + dz * lookDist,
-      ];
+      const tx = R.pos[0] + dx * lookDist;
+      const tz = R.pos[2] + dz * lookDist;
+      const yRoadAhead = Math.max(Course.height(tx, tz), R.pos[1] - lookDist * 0.78);
+      const slopeLineY = R.pos[1] - slope * lookDist * 0.62;
+      const downMix = isLow ? 0.50 : preset.downMix;
+      const ty = lerp(slopeLineY + 2.6, yRoadAhead + 4.4, downMix) - (R.air ? 0.45 : 0);
+      wantTgt = [tx, ty, tz];
       wantFov = (preset.baseFov + spdNorm * 13 + (R.boosting ? 8 : 0)) * PI / 180;
       wantRoll = R.roll * 0.14 + (feel.flinchRoll || 0);
     }

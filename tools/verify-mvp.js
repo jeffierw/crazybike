@@ -117,10 +117,10 @@ vm.runInContext(`
   const msPerFrame = simMs / (MOUNTAINS.length * 900);
   assert(msPerFrame < 6.0, 'All 4 mountains terrain + 3600 frames of 8-rider physics averaged ' + msPerFrame.toFixed(2) + 'ms/frame (<6ms budget)');
 
-  // 3. All 8 camera views, non-blocking chase framing, FPV lensCut & Photo Mode
+  // 3. All 8 slope-adaptive camera views, high-pitch chase framing revealing road 30m ahead, FPV lensCut & Photo Mode
   Course.init('redrock', 'freeride', 202611);
-  const PC = Physics.createRider({ isPlayer: true, s: 80, u: 0, initSpeed: 28 });
-  let camOk = true, fpvCutOk = false, headNdcY = 1;
+  const PC = Physics.createRider({ isPlayer: true, s: 75, u: 0, initSpeed: 28 });
+  let camOk = true, fpvCutOk = false, headNdcY = 1, road30NdcY = -2;
   for (const v of Camera.VIEWS) {
     Camera.reset(); Camera.setView(v.id);
     const c = Camera.update(PC, 1 / 60, 16 / 9, Feel, false);
@@ -129,13 +129,15 @@ vm.runInContext(`
     if (v.id === 'chase') {
       const m = c.vp, hy = PC.pos[1] + 1.85;
       headNdcY = (m[1] * PC.pos[0] + m[5] * hy + m[9] * PC.pos[2] + m[13]) / (m[3] * PC.pos[0] + m[7] * hy + m[11] * PC.pos[2] + m[15]);
+      const sp30 = Course.at(PC.s + 30), rz30 = -sp30.s, ry30 = Course.height(sp30.cx, rz30);
+      road30NdcY = (m[1] * sp30.cx + m[5] * ry30 + m[9] * rz30 + m[13]) / (m[3] * sp30.cx + m[7] * ry30 + m[11] * rz30 + m[15]);
     }
   }
   Photo.enter(PC.pos, Camera.lastCam);
   const pCam = Photo.step(1 / 60, 16 / 9);
   Photo.exit();
-  assert(camOk && fpvCutOk && headNdcY < 0.05 && pCam && !pCam.vp.some(x => !Number.isFinite(x)),
-    'All 8 cameras valid, chase headNdcY=' + headNdcY.toFixed(3) + ' (<0.05 non-blocking), FPV lensCut=ON, Photo Mode OK');
+  assert(camOk && fpvCutOk && headNdcY < -0.25 && road30NdcY > headNdcY + 0.08 && road30NdcY < 0.70 && pCam && !pCam.vp.some(x => !Number.isFinite(x)),
+    'All 8 slope-adaptive cams valid, chase headNdcY=' + headNdcY.toFixed(3) + ' (lower third), cliffDrop30mNdcY=' + road30NdcY.toFixed(3) + ' (clearly above helmet), FPV lensCut=ON');
 
   // 4. V3 Single committed random trick per jump (zero mid-air switching) + ink-brush ribbons + zero post-landing bounce
   Particles.clear();
