@@ -27,7 +27,7 @@ const Camera = (() => {
     fov: 68 * PI / 180,
     roll: 0,
     near: 0.24,
-    far: 980,
+    far: 1800,
     init: false,
     minClearance: 99,
     lastCam: null,

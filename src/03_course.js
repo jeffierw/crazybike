@@ -310,16 +310,16 @@ const Course = (() => {
     C.plannedS = 0;
     C.rng = RNG(C.seed ^ hashU(C.mountain.idx * 7919 + C.mode.id.length * 131));
     spinY = 4800; spinX = 0; spinHeading = 0; spinRollPh = 0;
-    planTo(C.mode.endless ? 1500 : C.finishS + 480);
+    planTo(C.mode.endless ? 1700 : C.finishS + 960);
   };
 
   C.ensureTo = function (s) {
-    if (s + 650 > C.plannedS) planTo(s + 1100);
+    if (s + 950 > C.plannedS) planTo(s + 1400);
   };
 
   C.at = function (s) {
     if (s < 0) s = 0;
-    if (s + 400 > C.plannedS) planTo(s + 800);
+    if (s + 880 > C.plannedS) planTo(s + 1250);
     const f = s / STEP;
     const i = Math.min(C.samples.length - 2, Math.max(0, Math.floor(f)));
     const t = clamp(f - i, 0, 1);
@@ -450,7 +450,7 @@ const Course = (() => {
         const wallScale = C.mountain.id === 'redrock' ? 0.34 : C.mountain.id === 'town' ? 0.26 : C.mountain.id === 'volcano' ? 0.32 : 0.24;
         const outerRise = Math.pow(outer, 1.10) * wallScale + (n1 * 0.5 + 0.5) * Math.min(28, outer * 0.42);
         const riseY = openFlank + (C.mountain.id === 'redrock'
-          ? Math.floor(outerRise / 5.0) * 2.2 + outerRise * 0.56
+          ? outerRise + Math.sin(outerRise * 0.44 + n1 * 2.2) * 1.25
           : outerRise);
 
         if (cliffW > 0.01) {
@@ -606,6 +606,8 @@ const Course = (() => {
         : kind === 'canyon' ? (rng() < 0.38 ? 'spire' : rng() < 0.74 ? 'boulder' : 'cactus')
         : kind === 'volcano' ? (rng() < 0.68 ? 'basalt' : 'ember')
         : (rng() < 0.76 ? 'house' : 'lamp');
+      if (sub === 'house' && n[1] < 0.80) continue;
+      if (sub === 'spire' && n[1] < 0.76) continue;
       const r = sub === 'house' ? 3.2 * scale : sub === 'spire' ? 2.1 * scale : (sub === 'boulder' || sub === 'basalt') ? 1.48 * scale : 0.78 * scale;
       const h = sub === 'house' ? 6.8 * scale : sub === 'pine' ? 11.4 * scale : sub === 'spire' ? 8.6 * scale : 3.4 * scale;
       let tooClose = false;
@@ -658,6 +660,8 @@ const Course = (() => {
         : kind === 'canyon' ? (rng() < 0.38 ? 'spire' : rng() < 0.72 ? 'boulder' : 'cactus')
         : kind === 'volcano' ? (rng() < 0.66 ? 'basalt' : 'ember')
         : (rng() < 0.76 ? 'house' : 'lamp');
+      if (sub === 'house' && n[1] < 0.80) continue;
+      if (sub === 'spire' && n[1] < 0.76) continue;
       const r = sub === 'house' ? 3.2 * scale : sub === 'spire' ? 2.1 * scale : (sub === 'boulder' || sub === 'basalt') ? 1.50 * scale : 0.78 * scale;
       const h = sub === 'house' ? 6.8 * scale : sub === 'pine' ? 11.2 * scale : sub === 'spire' ? 8.6 * scale : 3.4 * scale;
       let tooClose = false;

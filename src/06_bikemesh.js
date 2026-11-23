@@ -831,7 +831,7 @@ fn skinVertex(pos: vec3f, nrm: vec3f, bw: vec4f, baseRow: i32) -> SkinV {
 
 // ================================================================ 2. Instanced Procedural Solid Renderer (Bikes + World Props)
 const Solid = (() => {
-  const MAX_INST = 9600;
+  const MAX_INST = 14000;
   const shapes = {};
   let gfx = null, pipe = null, shPipe = null, instBuf = null;
   const instCPU = new Float32Array(MAX_INST * 16);
@@ -1011,17 +1011,19 @@ const Solid = (() => {
     return buildNormals(P, I);
   }
 
-  // Organic drooping alpine conifer bough whorl (14 irregular jagged needle sprays arranged radially)
+  // Organic drooping alpine conifer bough whorl (18 fuller overlapping needle sprays arranged radially)
   function makeBoughWhorl() {
     const P = [], I = [];
-    const N_FRONDS = 14;
+    const N_FRONDS = 18;
     for (let f = 0; f < N_FRONDS; f++) {
       const h0 = fract(Math.sin(f * 78.233 + 13.7) * 43758.54);
       const h1 = fract(Math.sin(f * 19.913 + 91.3) * 19341.17);
-      const baseA = (f / N_FRONDS) * TAU + (h0 - 0.5) * 0.24;
-      const len = 0.72 + h1 * 0.36;
-      const droop = -0.18 - h0 * 0.14;
-      const tilt = (f & 1 ? 1 : -1) * (0.04 + h1 * 0.05);
+      const baseA = (f / N_FRONDS) * TAU + (h0 - 0.5) * 0.22;
+      const isUpper = (f & 1) === 1;
+      const len = (isUpper ? 0.68 : 0.86) + h1 * 0.30;
+      const droop = isUpper ? (-0.08 - h0 * 0.08) : (-0.20 - h0 * 0.14);
+      const upOff = isUpper ? 0.10 : -0.02;
+      const tilt = (isUpper ? 1 : -1) * (0.04 + h1 * 0.05);
       const ca = Math.cos(baseA), sa = Math.sin(baseA);
       const rx = -sa, rz = ca;
       const rings = 4;
@@ -1029,16 +1031,15 @@ const Solid = (() => {
       for (let r = 0; r <= rings; r++) {
         const u = r / rings;
         const rr = u * len;
-        const yMid = u * 0.04 + droop * u * u + tilt * Math.sin(u * PI);
-        const w = (u < 0.15 ? u / 0.15 : Math.pow(1 - (u - 0.15) / 0.85, 0.75)) * (0.16 + 0.07 * Math.sin(u * 9.0 + f));
-        const th = Math.max(0.015, 0.045 * (1 - u * 0.7));
+        const yMid = upOff + u * 0.05 + droop * u * u + tilt * Math.sin(u * PI);
+        const w = (u < 0.15 ? u / 0.15 : Math.pow(1 - (u - 0.15) / 0.85, 0.68)) * (0.24 + 0.08 * Math.sin(u * 8.5 + f));
+        const th = Math.max(0.020, 0.058 * (1 - u * 0.62));
         const cx = ca * rr, cz = sa * rr;
-        // 4-point cross section per ring: top, right, bottom, left (CCW prism)
         P.push(
           cx, yMid + th, cz,
-          cx + rx * w, yMid - 0.015 * u, cz + rz * w,
+          cx + rx * w, yMid - 0.018 * u, cz + rz * w,
           cx, yMid - th, cz,
-          cx - rx * w, yMid - 0.015 * u, cz - rz * w
+          cx - rx * w, yMid - 0.018 * u, cz - rz * w
         );
       }
       for (let r = 0; r < rings; r++) {
@@ -1048,7 +1049,6 @@ const Solid = (() => {
           I.push(b0 + c, b1 + c, b0 + cn, b0 + cn, b1 + c, b1 + cn);
         }
       }
-      // Cap root & tip cleanly
       I.push(baseV, baseV + 1, baseV + 2, baseV, baseV + 2, baseV + 3);
       const tv = baseV + rings * 4;
       I.push(tv, tv + 3, tv + 2, tv, tv + 2, tv + 1);
@@ -1098,14 +1098,44 @@ const Solid = (() => {
     });
   }
 
-  // Fractured angular hexagonal volcanic basalt spire (-0.5..+0.5 in Y)
+  // Clustered stepped hexagonal volcanic basalt organ-pipe formation (-0.5..+0.5 in Y)
   function makeBasalt() {
-    return makeLathe(6, 6, (t, a, k) => {
-      const taper = lerp(0.55, 0.22, Math.pow(t, 0.85));
-      const slant = t > 0.7 ? (k & 1 ? 0.10 : -0.06) : 0;
-      const notch = 1 + 0.15 * Math.sin(t * 9.0 + k * 2.1);
-      return [Math.cos(a) * taper * notch, t - 0.5 + slant, Math.sin(a) * taper * notch];
-    });
+    const P = [], I = [];
+    const cols = [
+      [ 0.00,  0.00, 0.36, -0.50, 0.50, 0.1],
+      [-0.29,  0.14, 0.25, -0.50, 0.22, 1.3],
+      [ 0.28, -0.15, 0.23, -0.50, 0.08, 2.7],
+      [ 0.14,  0.27, 0.20, -0.50, 0.34, 4.1],
+    ];
+    const segs = 6, rings = 4, stride = segs + 1;
+    for (const [cx, cz, rad, yBot, yTop, seed] of cols) {
+      const baseV = P.length / 3;
+      const slant = 0.045 * Math.cos(seed);
+      for (let r = 0; r <= rings; r++) {
+        const t = r / rings;
+        const taper = rad * lerp(1.06, 0.72, t * 0.7);
+        for (let k = 0; k <= segs; k++) {
+          const a = (k / segs) * TAU + seed * 0.25;
+          const notch = 1 + 0.09 * Math.sin(t * 7.5 + k * 2.1 + seed);
+          const py = lerp(yBot, yTop, t) + (t > 0.75 ? slant * (k & 1 ? 1.0 : -0.7) : 0);
+          P.push(cx + Math.cos(a) * taper * notch, py, cz + Math.sin(a) * taper * notch);
+        }
+      }
+      for (let r = 0; r < rings; r++) {
+        for (let k = 0; k < segs; k++) {
+          const j0 = baseV + r * stride + k, j1 = j0 + stride;
+          I.push(j0, j1, j0 + 1, j1, j1 + 1, j0 + 1);
+        }
+      }
+      const cBot = P.length / 3;
+      P.push(cx, yBot, cz);
+      for (let k = 0; k < segs; k++) I.push(cBot, baseV + k + 1, baseV + k);
+      const topBase = baseV + rings * stride;
+      const cTop = P.length / 3;
+      P.push(cx, yTop + slant * 0.2, cz);
+      for (let k = 0; k < segs; k++) I.push(cTop, topBase + k, topBase + k + 1);
+    }
+    return buildNormals(P, I);
   }
 
   // Multi-lobe organic scrub / alpine bush cluster
@@ -1151,7 +1181,7 @@ const Solid = (() => {
     });
   }
 
-  // Pitched Mediterranean terracotta gable roof prism (centered X,Z in -0.5..0.5, Y in 0..1)
+  // Overhanging flared Mediterranean terracotta tiled roof + ridge beam (centered X,Z in -0.58..0.58, Y in 0..1)
   function makeRoof() {
     const P = [], I = [];
     const pushQuad = (a, b, c, d) => {
@@ -1164,13 +1194,28 @@ const Solid = (() => {
       P.push(...a, ...b, ...c);
       I.push(q, q + 1, q + 2);
     };
-    const fl = [-0.55, 0, -0.55], fr = [0.55, 0, -0.55], fTop = [0, 1, -0.45];
-    const bl = [-0.55, 0,  0.55], br = [0.55, 0,  0.55], bTop = [0, 1,  0.45];
-    pushQuad(fl, fTop, bTop, bl); // Left pitch
-    pushQuad(br, bTop, fTop, fr); // Right pitch
-    pushTri(fl, fr, fTop);        // Front gable
-    pushTri(br, bl, bTop);        // Rear gable
-    pushQuad(bl, br, fr, fl);     // Eaves bottom
+    const fl = [-0.62, 0.00, -0.60], fr = [0.62, 0.00, -0.60], ml = [-0.40, 0.36, -0.54], mr = [0.40, 0.36, -0.54], fTop = [0, 0.96, -0.44];
+    const bl = [-0.62, 0.00,  0.60], br = [0.62, 0.00,  0.60], rml = [-0.40, 0.36, 0.54], rmr = [0.40, 0.36, 0.54], bTop = [0, 0.96,  0.44];
+    // Flared eaves + upper pitch left/right
+    pushQuad(fl, ml, rml, bl);
+    pushQuad(ml, fTop, bTop, rml);
+    pushQuad(br, rmr, mr, fr);
+    pushQuad(rmr, bTop, fTop, mr);
+    // Gable ends
+    pushQuad(fl, fr, mr, ml);
+    pushTri(ml, mr, fTop);
+    pushQuad(br, bl, rml, rmr);
+    pushTri(rmr, rml, bTop);
+    // Under-eave soffit
+    pushQuad(bl, br, fr, fl);
+    // Raised terracotta ridge tile spine
+    const r0 = [-0.07, 0.94, -0.48], r1 = [0.07, 0.94, -0.48], r2 = [0.07, 1.06, -0.45], r3 = [-0.07, 1.06, -0.45];
+    const r4 = [-0.07, 0.94,  0.48], r5 = [0.07, 0.94,  0.48], r6 = [0.07, 1.06,  0.45], r7 = [-0.07, 1.06,  0.45];
+    pushQuad(r3, r2, r6, r7);
+    pushQuad(r0, r3, r7, r4);
+    pushQuad(r5, r6, r2, r1);
+    pushQuad(r0, r1, r2, r3);
+    pushQuad(r5, r4, r7, r6);
     return buildNormals(P, I);
   }
 

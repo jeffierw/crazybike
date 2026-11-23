@@ -64,7 +64,7 @@ vm.runInContext(`
     },
   };
   Post.init(mockGfx); Sky.init(mockGfx); Terrain.init(mockGfx); Solid.init(mockGfx); Particles.init(mockGfx);
-  assert(pipes.length >= 9, 'All ' + pipes.length + ' GPU pipelines compiled to WGSL + GLSL (' + pipes.join(', ') + ')');
+  assert(pipes.length >= 10, 'All ' + pipes.length + ' GPU pipelines compiled to WGSL + GLSL (' + pipes.join(', ') + ')');
 
   const rm = RiderMesh.info();
   let badRm = 0;
@@ -344,6 +344,66 @@ vm.runInContext(`
     bumpNoKo && punchNoKo && kickDoesKo && Combat.MAX_BOTTLE_TRACK <= 26 && Props.activeHitCount() >= 1,
     'V6 CamPreview, UprightRespawn, Pickups (' + pks.length + ' items), StrictKO (bump=' + (!bumpNoKo) + ', punch=' + (!punchNoKo) + ', kick=' + kickDoesKo + '), Flora/PropHit OK');
 
+  // 8. V7 Horizon-stretched terrain bounds, realistic flat-ground hops vs kicker big air, and 3D persistent tire tracks
+  Course.init('redrock', 'freeride', 202611);
+  Terrain.reset(); Terrain.update(60);
+  const tb = Terrain.bounds();
+
+  const measureHop = (holdFrames) => {
+    const RH = Physics.createRider({ isPlayer: true, s: 25, u: 0, initSpeed: 22 });
+    let peakRel = 0;
+    for (let i = 0; i < holdFrames; i++) Physics.stepRider(RH, { pedal: true, jump: true }, 1 / 60, i / 60);
+    for (let i = 0; i < 65; i++) {
+      Physics.stepRider(RH, { pedal: true, jump: false }, 1 / 60, (holdFrames + i) / 60);
+      const gy = Course.height(RH.pos[0], RH.pos[2]);
+      peakRel = Math.max(peakRel, RH.pos[1] - gy);
+    }
+    return peakRel;
+  };
+  const tapPeak = measureHop(3);
+  const fullPeak = measureHop(24);
+
+  const rm0 = Course.ramps[0];
+  const spRm = Course.at(Math.max(20, rm0.s - rm0.len * 0.65));
+  const RRm = Physics.createRider({ isPlayer: true, s: spRm.s, u: rm0.u, initSpeed: 26 });
+  RRm.vel = [0, -10, -26]; RRm.yaw = 0;
+  let rampPeak = 0;
+  for (let i = 0; i < 120; i++) {
+    const distToLip = rm0.s - RRm.s;
+    const hold = distToLip > 0.8 && distToLip < rm0.len * 0.65;
+    Physics.stepRider(RRm, { pedal: true, jump: hold }, 1 / 60, i / 60);
+    rampPeak = Math.max(rampPeak, RRm.pos[1] - Course.height(RRm.pos[0], RRm.pos[2]));
+  }
+
+  let tracksAllOk = true;
+  let totalTrk = 0;
+  for (let bi = 0; bi < MOUNTAINS.length; bi++) {
+    Course.init(MOUNTAINS[bi].id, 'freeride', 202611 + bi);
+    Particles.clear();
+    const RT = Physics.createRider({ isPlayer: true, s: 30, u: 0, initSpeed: 22 });
+    for (let i = 0; i < 36; i++) {
+      Physics.stepRider(RT, { pedal: true, brake: i > 20, steer: i > 10 ? 0.6 : -0.4 }, 1 / 60, i / 60);
+      Particles.emitTire(RT, 1 / 60, 'high');
+    }
+    Particles.step(1 / 60);
+    const groundCnt = Particles.trackCount();
+    if (groundCnt < 36) tracksAllOk = false;
+    totalTrk += groundCnt;
+    // Jump mid-run and ensure airborne frames do NOT append track vertices
+    RT.air = true; RT.pos[1] += 2.0; RT.vel[1] = 5;
+    Physics.stepRider(RT, { pedal: true }, 1 / 60, 1.0);
+    Particles.emitTire(RT, 1 / 60, 'high');
+    Particles.step(1 / 60);
+    if (Particles.trackCount() > groundCnt) tracksAllOk = false;
+  }
+
+  assert(
+    tb.ahead >= 750 && tb.back >= 50 && tb.halfWidth >= 500 &&
+    tapPeak >= 0.18 && tapPeak <= 0.70 && fullPeak >= 0.50 && fullPeak <= 1.25 && rampPeak >= 2.2 &&
+    tracksAllOk,
+    'V7 Horizon(' + Math.round(tb.back) + 'm..' + Math.round(tb.ahead) + 'm, +-'+ Math.round(tb.halfWidth) + 'm), Hops(tap=' + tapPeak.toFixed(2) + 'm, full=' + fullPeak.toFixed(2) + 'm, ramp=' + rampPeak.toFixed(2) + 'm), Tracks(' + totalTrk + ' verts) OK'
+  );
+
   if (failures > 0) process.exit(1);
-  console.log('\\nALL CRAZYBIKE V6 CHECKS PASSED!');
+  console.log('\\nALL CRAZYBIKE V7 CHECKS PASSED!');
 `, ctx);

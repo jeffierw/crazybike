@@ -18,6 +18,8 @@ const Physics = (() => {
     const u = cfg.u || 0;
     const x = sp.cx + u, z = -startS;
     const y = Course.height(x, z);
+    const spd0 = cfg.initSpeed || 8;
+    const gSlopeVy = clamp(-sp.slope * spd0, -24, 4);
     return {
       id: cfg.id || 0,
       name: cfg.name || 'PLAYER',
@@ -30,12 +32,12 @@ const Physics = (() => {
       helmetCol: cfg.helmetCol || [1.0, 0.84, 0.14],
 
       pos: [x, y, z],
-      vel: [0, 0, -(cfg.initSpeed || 8)],
+      vel: [0, gSlopeVy, -spd0],
       yaw: 0,          // rad; forward = (-sin(yaw), 0, -cos(yaw))
-      pitch: -0.25,    // nose up positive, downhill negative
+      pitch: -Math.atan(sp.slope || 0.25),    // nose up positive, downhill negative
       roll: 0,         // left lean positive, right lean negative
       steer: 0,        // smoothed steer input -1 (left) .. +1 (right)
-      speed: cfg.initSpeed || 8,
+      speed: spd0,
       s: startS,
       u,
 
@@ -44,7 +46,7 @@ const Physics = (() => {
       airPeak: 0,
       airStartY: y,
       landGrace: 0,
-      prevSlopeVy: 0,
+      prevSlopeVy: gSlopeVy,
       charge: 0,
       wasJumpHeld: false,
       susp: 0,
@@ -363,12 +365,25 @@ const Physics = (() => {
       R.vel[0] = fx * newVFwd + rx * newVLat;
       R.vel[2] = fz * newVFwd + rz * newVLat;
 
-      // Jump charging & release (or automatic lip pop!)
+      // Jump charging & release: realistic flat/trail bunny hop vs massive kicker/cliff lip launch!
       if (jumpHeld) {
-        R.charge = Math.min(1, R.charge + dt * 2.4);
-      } else if (R.wasJumpHeld && R.charge > 0.06) {
-        const pop = (5.4 + 5.6 * R.charge) * st.jumpMul + (R.onRamp ? 3.2 : 0);
-        R.vel[1] = Math.max(R.vel[1], 0) + pop;
+        R.charge = Math.min(1, R.charge + dt * 2.8);
+        R.susp = Math.max(R.susp, R.charge * 0.13);
+      } else if (R.wasJumpHeld && R.charge > 0.04) {
+        const onLaunch = R.onRamp || surf.dropEdge > 0.25;
+        let pop;
+        if (onLaunch) {
+          const lipBonus = R.onRamp ? (3.8 + 1.8 * R.charge) : (2.6 + 1.4 * R.charge);
+          pop = (4.2 + 3.4 * R.charge) * st.jumpMul + lipBonus;
+          R.vel[1] = Math.max(R.vel[1], 0) + pop;
+        } else {
+          const flatMul = 1.0 + R.upgrades.fork * 0.04;
+          pop = (2.25 + 2.45 * Math.sqrt(R.charge)) * flatMul;
+          const baseVy = Math.min(R.vel[1], 2.0);
+          R.vel[1] = baseVy + pop;
+          R.pitch = clamp(R.pitch + 0.18, -0.55, 0.42);
+        }
+        R.pos[1] += 0.02;
         R.air = true;
         R.airTime = 0;
         R.airStartY = R.pos[1];

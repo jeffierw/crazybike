@@ -418,6 +418,7 @@ const App = (() => {
     gfx.beginPass(Post.sceneTarget, { color: [0.08, 0.09, 0.12, 1], depth: 1.0 });
     Sky.draw();
     if (drawWorld) Terrain.draw(Post.shadowTex);
+    if (drawWorld && Particles.drawTracks) Particles.drawTracks();
     Solid.drawColor(Post.shadowTex);
     if (drawWorld) Particles.draw(cam.viewM);
     gfx.endPass();

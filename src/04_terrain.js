@@ -1,20 +1,35 @@
-// ---------------------------------------------------------------- 04_terrain: V3 photorealistic procedural mountain terrain
-// Open multi-line natural freeride trails (no artificial painted lane borders!), micro-normal rock/dirt detail,
-// sunlit Fresnel sheen, dramatic 14-26m sheer cliff strata & gleaming coastal water/volcanic lava.
+// ---------------------------------------------------------------- 04_terrain: Horizon-stretched seamless procedural mountain terrain (zero airborne clipping!)
+// Dense 2.5m track/drop resolution near rider stretching smoothly to +-560m lateral / +820m ahead into atmospheric haze.
 const Terrain = (() => {
-  const NU = 83, NS = 152, DS = 2.6;
+  const NU = 89, NS = 156, BASE_STEP = 2.5;
   const STRIDE = 10; // pos(3) + nrm(3) + mat(4)
   const verts = new Float32Array(NU * NS * STRIDE);
 
-  // Sweeping lateral offsets out to +-185m for expansive open freeride mountainsides & deep cliff chasms
+  // Sweeping lateral offsets out to +-560m so airborne wide/panoramic angles never clip terrain bounds
   const U_OFF = new Float32Array(NU);
   {
     const mid = (NU - 1) >> 1;
     for (let i = 0; i < NU; i++) {
       const k = (i - mid) / mid;
       const ak = Math.abs(k);
-      const dist = ak * 36.0 + Math.pow(ak, 2.65) * 150.0;
+      const dist = ak * 34.0 + Math.pow(ak, 2.85) * 526.0;
       U_OFF[i] = sign(k) * dist;
+    }
+  }
+
+  // Non-uniform longitudinal offsets: -66.5m behind rider -> 2.5m dense across 0..200m -> 820m horizon ahead
+  const S_OFF = new Float32Array(NS);
+  {
+    for (let r = 0; r < NS; r++) {
+      if (r < 15) {
+        const back = (14 - r) / 14;
+        S_OFF[r] = -((15 - r) * BASE_STEP + Math.pow(back, 1.8) * 29.0);
+      } else if (r <= 95) {
+        S_OFF[r] = (r - 15) * BASE_STEP;
+      } else {
+        const t = (r - 95) / 60;
+        S_OFF[r] = 200.0 + t * 180.0 + t * t * 440.0;
+      }
     }
   }
 
@@ -32,26 +47,30 @@ const Terrain = (() => {
   }
 
   let gfx = null, vb = null, ib = null, pipe = null;
-  let baseRow = -999999, baseColX = 0;
+  let baseS = -999999, anchorX = 0;
 
-  function fillRow(rowIdx, worldRow, colX = 0) {
-    const s = Math.max(0, worldRow * DS);
-    const z = -s;
+  function fillRow(rowIdx, refBaseS, refAnchorX) {
+    const rawS = refBaseS + S_OFF[rowIdx];
+    const s = Math.max(0, rawS);
+    const z = -rawS;
     const sp = Course.at(s);
     const lanes = Course.lanesAt(s, sp.seg);
     const ramps = Course.rampsNear(s - 2, s + 2);
     const ck = Course.creekAt(s);
     const isEndless = Course.mode.endless;
+    const preGateRise = rawS < 0 ? (-rawS) * sp.slope * 0.65 : 0;
     let o = rowIdx * NU * STRIDE;
 
     for (let c = 0; c < NU; c++) {
-      const x = isEndless ? (colX + U_OFF[c]) : (sp.cx + U_OFF[c]);
-      const u = isEndless ? (x - sp.cx) : U_OFF[c];
-      const y = Course.height(x, z, sp, lanes, ramps);
+      const uOff = U_OFF[c];
+      const wingBlend = isEndless ? 1.0 : smooth(90.0, 240.0, Math.abs(uOff));
+      const x = isEndless ? (refAnchorX + uOff) : (lerp(sp.cx, refAnchorX, wingBlend) + uOff);
+      const u = x - sp.cx;
+      const y = Course.height(x, -s, sp, lanes, ramps) + preGateRise;
 
-      // Soft organic worn-trail mask (no hard painted border!) + braided natural shortcut paths
+      // Soft organic worn-trail mask + braided natural shortcut paths
       const au = Math.abs(u);
-      const mainTrack = 1 - smooth(sp.hw * 0.55, sp.hw * 1.35, au);
+      const mainTrack = (rawS >= 0 && rawS < Course.finishS + 140) ? (1 - smooth(sp.hw * 0.55, sp.hw * 1.35, au)) : 0;
       let shortTrack = 0;
       for (let k = 0; k < lanes.length; k++) {
         const L = lanes[k];
@@ -59,7 +78,7 @@ const Terrain = (() => {
         if (lm > shortTrack) shortTrack = lm;
       }
 
-      const creekM = (ck.active && sp.dropFace < 0.35)
+      const creekM = (rawS >= 0 && ck.active && sp.dropFace < 0.35)
         ? (1 - smooth(ck.hw * 0.45, ck.hw * 1.15, Math.abs(u - ck.u))) * ck.blend * (1 - smooth(0.25, 0.75, sp.dropFace))
         : 0;
 
@@ -171,7 +190,7 @@ const Terrain = (() => {
             let strata: f32 = sin(wp.y * 0.58 + g1 * 3.8 + g2 * 1.4) * 0.5 + 0.5;
             let steep: f32 = smoothstep(0.24, 0.64, 1.0 - n0.y);
 
-            // Analytical procedural micro-normal perturbation (real rough rock faces, gravel grit & stratified ledges!)
+            // Analytical procedural micro-normal perturbation
             let eps: f32 = 0.25;
             let hC: f32 = fbm3(wp.xz * 0.65) + 0.35 * vnoise(wp.xz * 3.2);
             let hX: f32 = fbm3((wp.xz + vec2f(eps, 0.0)) * 0.65) + 0.35 * vnoise((wp.xz + vec2f(eps, 0.0)) * 3.2);
@@ -179,7 +198,7 @@ const Terrain = (() => {
             let bumpStr: f32 = mix(0.24, 0.68, saturate(steep + dropFace * 0.5));
             let n: vec3f = normalize(n0 + vec3f((hC - hX) * bumpStr, 0.0, (hC - hZ) * bumpStr));
 
-            // Organic noisy breakup on worn freeride trails (never looks like a painted highway!)
+            // Organic noisy breakup on worn freeride trails
             let trackM: f32 = saturate(rawTrack * (0.72 + 0.45 * g2) - 0.08 * (1.0 - rawTrack));
 
             var offCol: vec3f = mix(M.bankCol.rgb, M.rockCol.rgb, saturate(steep * 1.18 + g1 * 0.28));
@@ -200,14 +219,14 @@ const Terrain = (() => {
               offCol = mix(floorC, granC, saturate(steep * 1.25 + dropFace * 0.65));
               specHint = 0.16 * steep;
             } else if (biome < 2.5) {
-              // Volcanic Ridge: faceted obsidian black basalt, scorched ash & glossy glassy reflections
+              // Volcanic Ridge: faceted obsidian black basalt, scorched ash & glossy volcanic glass
               offCol = mix(M.bankCol.rgb, M.rockCol.rgb * (0.75 + 0.45 * strata), g1 * 0.45 + steep * 0.65) * (0.80 + 0.30 * grit);
               specHint = 0.28 * (0.4 + 0.6 * steep);
             } else {
-              // Hillside Town: warm Mediterranean limestone cliffs + sunlit ocean below!
+              // Hillside Town: warm Mediterranean limestone cliffs + sunlit ocean cove below
               offCol = mix(M.bankCol.rgb, M.rockCol.rgb * (0.82 + 0.28 * strata), steep * 0.85) * (0.85 + 0.24 * grit);
               let ocean: f32 = smoothstep(0.38, 0.88, chasmM) * (1.0 - steep);
-              let wave: f32 = 0.86 + 0.18 * sin(wp.x * 0.35 + U.camPos.w * 2.4 + g1 * 5.0);
+              let wave: f32 = 0.88 + 0.14 * fbm3(wp.xz * 0.18 + vec2f(U.camPos.w * 0.35, -U.camPos.w * 0.22));
               offCol = mix(offCol, vec3f(0.05, 0.32, 0.50) * wave, ocean * 0.94);
               specHint = ocean * 0.85;
             }
@@ -217,13 +236,11 @@ const Terrain = (() => {
             var trkCol: vec3f = M.trackCol.rgb * (0.74 + 0.24 * grit + 0.12 * micro + 0.12 * ruts);
             trkCol = mix(trkCol, M.trackCol.rgb * 1.15 + vec3f(0.04, 0.03, 0.01), shortM * 0.42);
 
-            // Exposed rocky strata across sheer mega cliff drop-off faces!
             if (dropFace > 0.08) {
               let cliffRock: vec3f = mix(M.rockCol.rgb * 0.72, M.accentCol.rgb * 0.82, strata * 0.42) * (0.82 + 0.28 * grit);
               trkCol = mix(trkCol, cliffRock, saturate(dropFace * (0.45 + 0.55 * steep)));
             }
 
-            // Town worn stone cobbles & stair edges
             if (biome > 2.5) {
               let cob: f32 = vnoise(wp.xz * 2.8);
               trkCol = mix(trkCol * 0.88, trkCol * 1.14, cob);
@@ -235,7 +252,6 @@ const Terrain = (() => {
 
             var albedo: vec3f = mix(offCol, trkCol, trackM);
 
-            // Weathered timber kicker ramp planks
             if (rampM > 0.05) {
               let woodPlanks: f32 = 0.80 + 0.20 * sin(-wp.z * 5.4);
               let wear: f32 = 0.86 + 0.20 * grit;
@@ -244,14 +260,12 @@ const Terrain = (() => {
               albedo = mix(albedo, deckCol, saturate(rampM * 1.45));
             }
 
-            // Finish line checkered banner stripe
             let finDist: f32 = abs(-wp.z - M.trackCol.w);
             if (finDist < 2.4 && rawTrack > 0.15) {
               let chk: f32 = step(0.5, fract(floor(wp.x * 1.2) * 0.5 + floor(-wp.z * 1.2) * 0.5));
               albedo = mix(vec3f(0.08, 0.08, 0.09), vec3f(0.95, 0.94, 0.92), chk);
             }
 
-            // Sparkling downhill-flowing mountain creek (or molten magma creek on Volcano!)
             if (creekM > 0.02) {
               let flowN: f32 = fbm3(vec2f(wp.x * 1.25, wp.z * 0.65 - U.camPos.w * 4.8));
               let foamBand: f32 = smoothstep(0.06, 0.28, creekM) * (1.0 - smoothstep(0.32, 0.65, creekM));
@@ -270,20 +284,34 @@ const Terrain = (() => {
             let sh: f32 = sampleShadow(wp, n);
             var col: vec3f = litSurface(albedo, n, wp, rough, sh);
 
-            // Sunlit grazing-angle mineral / dust / ocean reflection shimmer (Cold-Smoke sunlight feel!)
             let viewD: vec3f = normalize(U.camPos.xyz - wp);
             let halfV: vec3f = normalize(U.sunDir.xyz + viewD);
             let sunGlint: f32 = pow(max(dot(n, halfV), 0.0), mix(18.0, 96.0, specHint)) * (0.14 + specHint * 0.95) * sh;
             let dustRim: f32 = pow(1.0 - max(dot(n, viewD), 0.0), 4.0) * max(dot(viewD, -U.sunDir.xyz), 0.0) * 0.16;
             col = col + U.sunCol.rgb * (sunGlint + dustRim);
 
-            // Volcanic glowing molten lava veins on sheer cliff walls & glowing magma chasm floor
             if (biome > 1.5 && biome < 2.5) {
               let crack: f32 = smoothstep(0.71, 0.87, fbm3(wp.xz * 0.09 + vec2f(2.1, 4.7)));
               let chasmRiver: f32 = smoothstep(0.40, 0.86, chasmM) * smoothstep(0.45, 0.72, fbm3(wp.xz * 0.05 + vec2f(0.0, U.camPos.w * 0.06)));
               let lava: f32 = saturate(crack * steep * (1.0 - trackM) + chasmRiver * 1.25);
               col = col + vec3f(2.8, 0.56, 0.08) * lava * (0.78 + 0.22 * sin(U.camPos.w * 3.2 + wp.z * 0.14));
             }
+
+            // Seamless atmospheric terrain-to-sky horizon blend (zero visible mesh boundary when airborne!)
+            let horVec: vec3f = wp - U.camPos.xyz;
+            let horDist: f32 = length(horVec);
+            let horFade: f32 = smoothstep(420.0, 770.0, horDist);
+            let horDir: vec3f = horVec / max(horDist, 0.001);
+            let sunHor: f32 = pow(max(dot(horDir, U.sunDir.xyz), 0.0), 5.0);
+            var horTint: vec3f = mix(U.skyHor.rgb, U.sunCol.rgb * 1.12, sunHor * 0.42);
+            if (biome > 0.5 && biome < 1.5) {
+              horTint = mix(U.skyHor.rgb * 1.04, U.sunCol.rgb * 1.05, 0.22 + sunHor * 0.30);
+            } else if (biome > 1.5 && biome < 2.5) {
+              horTint = mix(U.skyHor.rgb * 0.85, vec3f(1.05, 0.36, 0.14), 0.20 + sunHor * 0.28);
+            } else if (biome > 2.5) {
+              horTint = mix(U.skyHor.rgb * 0.96, vec3f(0.45, 0.68, 0.84), 0.18 + sunHor * 0.22);
+            }
+            col = mix(col, horTint, horFade * 0.96);
 
             var o: FOut;
             o.color = vec4f(acesTone(col * U.sunCol.w), 1.0);
@@ -294,31 +322,25 @@ const Terrain = (() => {
     },
 
     reset() {
-      baseRow = -999999;
-      baseColX = 0;
+      baseS = -999999;
+      anchorX = 0;
     },
+
+    bounds: () => ({ back: -S_OFF[0], ahead: S_OFF[NS - 1], halfWidth: Math.abs(U_OFF[NU - 1]) }),
 
     update(centerS, centerX = null) {
       if (!gfx) return;
-      const targetRow = Math.max(0, Math.floor((centerS - 24) / DS));
-      const targetColX = (Course.mode.endless && centerX !== null && centerX !== undefined)
+      const targetBaseS = Math.max(0, Math.floor(centerS / BASE_STEP) * BASE_STEP);
+      const targetAnchorX = (Course.mode.endless && centerX !== null && centerX !== undefined)
         ? Math.round(centerX / 4) * 4
-        : 0;
-      if (targetRow === baseRow && targetColX === baseColX) return;
-      Course.ensureTo((targetRow + NS) * DS + 50);
+        : Math.round(Course.at(targetBaseS + 80).cx / 4) * 4;
+      if (targetBaseS === baseS && targetAnchorX === anchorX) return;
+      Course.ensureTo(targetBaseS + S_OFF[NS - 1] + 60);
 
-      const delta = targetRow - baseRow;
-      if (targetColX === baseColX && delta > 0 && delta < NS - 8) {
-        const rowFloats = NU * STRIDE;
-        verts.copyWithin(0, delta * rowFloats, NS * rowFloats);
-        for (let r = NS - delta; r < NS; r++) fillRow(r, targetRow + r, targetColX);
-        computeNormals(NS - delta - 1, NS - 1);
-      } else {
-        for (let r = 0; r < NS; r++) fillRow(r, targetRow + r, targetColX);
-        computeNormals(0, NS - 1);
-      }
-      baseRow = targetRow;
-      baseColX = targetColX;
+      for (let r = 0; r < NS; r++) fillRow(r, targetBaseS, targetAnchorX);
+      computeNormals(0, NS - 1);
+      baseS = targetBaseS;
+      anchorX = targetAnchorX;
       gfx.updateBuffer(vb, 0, verts);
     },
 

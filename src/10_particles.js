@@ -1,7 +1,7 @@
-// ---------------------------------------------------------------- 10_particles: V3 sunlit backlit dust, atmospheric motes & Painterly Ink-Brush Spray Ribbons (喷墨彩带)
+// ---------------------------------------------------------------- 10_particles: V7 Persistent 3D Tire Tracks, Biome Rooster-Tail Spray & Ink-Brush Ribbons
 const Particles = (() => {
-  // ---- A. Instanced Sunlit Billboard Dust, Ink Droplets & Biome Atmospheric Motes ----
-  const MAX = 820;
+  // ---- A. Instanced Sunlit Billboard Dust, Gravel Chips & Biome Atmospheric Motes ----
+  const MAX = 920;
   const px = new Float32Array(MAX), py = new Float32Array(MAX), pz = new Float32Array(MAX);
   const vx = new Float32Array(MAX), vy = new Float32Array(MAX), vz = new Float32Array(MAX);
   const age = new Float32Array(MAX), life = new Float32Array(MAX), sz0 = new Float32Array(MAX), sz1 = new Float32Array(MAX);
@@ -9,7 +9,6 @@ const Particles = (() => {
   const gravK = new Float32Array(MAX), sunLit = new Float32Array(MAX);
   let head = 0;
 
-  // Packed GPU instance buffer: posSize(4), colAlpha(4) -> 8 floats/instance
   const gpuData = new Float32Array(MAX * 8);
   let gfx = null, quadVB = null, instVB = null, pipe = null, liveCount = 0;
 
@@ -18,8 +17,8 @@ const Particles = (() => {
     -1, -1,  1,  1, -1, 1,
   ]);
 
-  // ---- B. Painterly Ink-Brush / Spray-Paint Ribbon Trails (Alpha-blended pigment + dry-brush bristles!) ----
-  const NUM_RIBBONS = 4; // 0: left hand ink stroke, 1: right hand ink stroke, 2: tire chalk/ink streamer, 3: reserve
+  // ---- B. Painterly Ink-Brush / Spray-Paint Ribbon Trails ----
+  const NUM_RIBBONS = 4;
   const RIB_SEGS = 38;
   const RIB_STRIDE = 9;  // pos(3) + uv(2) + col(4)
   const MAX_RIB_VERTS = NUM_RIBBONS * (RIB_SEGS - 1) * 6;
@@ -29,12 +28,22 @@ const Particles = (() => {
   const ribbons = [];
   for (let i = 0; i < NUM_RIBBONS; i++) ribbons.push({ nodes: [], acc: 0 });
 
-  // Physical ink-pigment palettes per biome / trick (deep organic inks, NEVER sci-fi neon lasers!)
+  // ---- C. Persistent Terrain-Hugging 3D Carved Tire Tracks ----
+  const MAX_TRACK_RIDERS = 8; // 0 = player (200 nodes), 1..7 = rivals (48 nodes each)
+  const PLAYER_TRACK_SEGS = 200;
+  const RIVAL_TRACK_SEGS = 48;
+  const MAX_TRK_VERTS = (PLAYER_TRACK_SEGS + (MAX_TRACK_RIDERS - 1) * RIVAL_TRACK_SEGS) * 6;
+  const trkVerts = new Float32Array(MAX_TRK_VERTS * RIB_STRIDE);
+  let trkVB = null, trkPipe = null, trackVertCount = 0;
+
+  const trackSlots = [];
+  for (let i = 0; i < MAX_TRACK_RIDERS; i++) trackSlots.push({ nodes: [], wasAir: true });
+
   const INK_PALETTES = [
-    [[0.78, 0.16, 0.08], [0.88, 0.52, 0.10], [0.11, 0.11, 0.13]], // Red Rock: vermilion ink, ochre gold, sumi charcoal
-    [[0.12, 0.44, 0.28], [0.86, 0.64, 0.16], [0.10, 0.12, 0.13]], // Pine Forest: pine mineral green, sunlit amber, sumi
-    [[0.86, 0.22, 0.06], [0.12, 0.10, 0.12], [0.94, 0.48, 0.08]], // Volcano: lava vermilion, soot black, ember gold
-    [[0.10, 0.46, 0.68], [0.88, 0.28, 0.18], [0.92, 0.72, 0.22]], // Hillside Town: coastal cobalt, coral terracotta, ochre
+    [[0.78, 0.16, 0.08], [0.88, 0.52, 0.10], [0.11, 0.11, 0.13]],
+    [[0.12, 0.44, 0.28], [0.86, 0.64, 0.16], [0.10, 0.12, 0.13]],
+    [[0.86, 0.22, 0.06], [0.12, 0.10, 0.12], [0.94, 0.48, 0.08]],
+    [[0.10, 0.46, 0.68], [0.88, 0.28, 0.18], [0.92, 0.72, 0.22]],
   ];
 
   function pushRibbonNode(ri, pos, side, col, alpha, width) {
@@ -61,7 +70,6 @@ const Particles = (() => {
       quadVB = gfx.buffer(QUAD, 'vertex', false);
       instVB = gfx.buffer(gpuData, 'vertex', true);
 
-      // Sunlit dust / spray / droplet billboard shader with realistic directional sunlight forward-scattering!
       pipe = gfx.pipeline({
         name: 'particles',
         colorFormat: 'rgba8',
@@ -96,7 +104,6 @@ const Particles = (() => {
             let alpha: f32 = soft * soft * v.col.a;
             if (alpha < 0.004) { discard; }
 
-            // Directional sunlight forward-scattering glow through kicked-up dust clouds!
             let viewD: vec3f = normalize(v.wpos - U.camPos.xyz);
             let sunFwd: f32 = pow(max(dot(viewD, U.sunDir.xyz), 0.0), 3.0);
             let rim: f32 = (1.0 - soft) * sunFwd * 0.65 + sunFwd * 0.35;
@@ -110,7 +117,6 @@ const Particles = (() => {
         `,
       });
 
-      // Painterly Ink-Brush / Spray-Paint Ribbon Pipeline (Alpha-blended physical pigment with fibrous bristle breakup!)
       ribVB = gfx.buffer(ribVerts, 'vertex', true);
       ribPipe = gfx.pipeline({
         name: 'ribbons',
@@ -141,27 +147,78 @@ const Particles = (() => {
         `,
         fs: `
           fn frag(v: VOut) -> FOut {
-            // Organic sumi-ink & spray-paint brush profile: dense brushstroke body + dry-brush fibrous bristles & spatter edges!
             let across: f32 = abs(v.uv.x * 2.0 - 1.0);
             let tail: f32 = saturate(v.uv.y);
             let bristles: f32 = vnoise(vec2f(v.uv.x * 16.0, v.uv.y * 4.5));
             let splatter: f32 = fbm3(vec2f(v.uv.x * 6.5, v.uv.y * 12.0));
             let edgeNoise: f32 = (bristles * 0.55 + splatter * 0.45) * 0.58;
 
-            // Pinch head & dry-brush feather out tail organically
             let widthEnv: f32 = smoothstep(0.0, 0.14, tail) * (1.0 - smoothstep(0.86, 1.0, tail) * 0.35);
             let mask: f32 = 1.0 - smoothstep(widthEnv * 0.42 - edgeNoise * 0.32, widthEnv * 0.96 + 0.08, across + edgeNoise * (1.0 - tail * 0.55));
             let dryCut: f32 = smoothstep(0.18 * (1.0 - tail), 0.55, bristles * 0.6 + tail * 0.72);
             let a: f32 = saturate(mask * dryCut * tail * v.col.a);
             if (a < 0.015) { discard; }
 
-            // Natural sunlit pigment shading (rich matte paint/ink with subtle dusty sunlit highlight — zero electronic neon!)
             let pigDark: vec3f = v.col.rgb * (0.58 + 0.42 * splatter);
             let sunTint: vec3f = U.sunCol.rgb * 0.36 + vec3f(0.68);
             let c: vec3f = applyFog(pigDark * sunTint, v.wpos);
 
             var o: FOut;
             o.color = vec4f(acesTone(c * U.sunCol.w), a);
+            return o;
+          }
+        `,
+      });
+
+      // Persistent terrain-conforming MTB tire rut & creek wake pipeline
+      trkVB = gfx.buffer(trkVerts, 'vertex', true);
+      trkPipe = gfx.pipeline({
+        name: 'tracks',
+        colorFormat: 'rgba8',
+        depth: true,
+        depthTest: true,
+        depthWrite: false,
+        depthBias: -2,
+        depthBiasSlope: -1.5,
+        blend: 'alpha',
+        cull: 'none',
+        buffers: [{
+          attrs: [
+            ['pos', 'vec3f'],
+            ['uv',  'vec2f'],
+            ['col', 'vec4f'],
+          ],
+        }],
+        varyings: { uv: 'vec2f', col: 'vec4f', wpos: 'vec3f' },
+        lib: [SHADER_COMMON],
+        vs: `
+          fn vert(a: VIn) -> VOut {
+            var v: VOut;
+            v.clip = U.viewProj * vec4f(a.pos, 1.0);
+            v.uv = a.uv;
+            v.col = a.col;
+            v.wpos = a.pos;
+            return v;
+          }
+        `,
+        fs: `
+          fn frag(v: VOut) -> FOut {
+            let uCenter: f32 = abs(v.uv.x * 2.0 - 1.0);
+            let fade: f32 = saturate(v.uv.y);
+            let n: f32 = vnoise(v.wpos.xz * 2.4);
+            let tread: f32 = 0.84 + 0.16 * sin(v.wpos.z * 11.0 + v.uv.x * 4.0);
+            let rutMask: f32 = 1.0 - smoothstep(0.30, 0.92, uCenter + (n - 0.5) * 0.22);
+            let dRim: f32 = (uCenter - 0.72) / 0.18;
+            let rimEdge: f32 = exp(-(dRim * dRim)) * (1.0 - smoothstep(0.88, 1.0, uCenter));
+            let alpha: f32 = saturate((rutMask * 0.85 + rimEdge * 0.35) * fade * v.col.a);
+            if (alpha < 0.012) { discard; }
+
+            let trenchCol: vec3f = v.col.rgb * tread * (0.78 + 0.34 * n);
+            let edgeRimCol: vec3f = mix(trenchCol, v.col.rgb * 1.48 + vec3f(0.10, 0.08, 0.06), rimEdge * 0.55);
+            let fogged: vec3f = applyFog(edgeRimCol, v.wpos);
+
+            var o: FOut;
+            o.color = vec4f(acesTone(fogged * U.sunCol.w), alpha);
             return o;
           }
         `,
@@ -176,13 +233,22 @@ const Particles = (() => {
         ribbons[i].acc = 0;
       }
       ribVertCount = 0;
+      for (let i = 0; i < MAX_TRACK_RIDERS; i++) {
+        trackSlots[i].nodes.length = 0;
+        trackSlots[i].wasAir = true;
+      }
+      trackVertCount = 0;
     },
 
     spawn,
 
-    // Emit realistic sunlit dust plumes, gravel spray & Painterly Ink-Brush trick ribbons + paint droplets!
+    // Record persistent carved tire tracks + emit biomechanical dust plumes & biome gravel/needle/ember spray
     emitTire(R, dt, quality = 'auto') {
+      const slotIdx = R.isPlayer ? 0 : (1 + (Math.abs(R.id || 0) % (MAX_TRACK_RIDERS - 1)));
+      const tr = trackSlots[slotIdx];
+
       if (R.crashed) {
+        tr.wasAir = true;
         if (R.isPlayer) {
           ribbons[0].nodes.length = 0;
           ribbons[1].nodes.length = 0;
@@ -194,7 +260,7 @@ const Particles = (() => {
       const qMul = typeof Quality !== 'undefined' ? Quality.cfg(quality).particleMul
         : (quality === 'low' || quality === 'smooth') ? 0.42 : quality === 'balanced' ? 0.78 : quality === 'high' ? 1.35 : 1.0;
 
-      // 1. Expressive Painterly Ink-Brush Ribbons & Spray-Paint Droplets during committed air tricks or overdrive!
+      // 1. Painterly Ink-Brush Ribbons & Spray-Paint Droplets during committed air tricks or overdrive
       if (R.isPlayer) {
         const showRibbon = R.trickActive || (R.boosting && R.speed > 26);
         if (showRibbon) {
@@ -211,7 +277,6 @@ const Particles = (() => {
             const spread = (R.trickType === 'nohander' && R.trickPhase > 0.1) ? 0.52 * R.trickPhase : 0;
             const pL = m4.tp(m, [-0.48 - spread, 1.18 + spread * 1.1, -0.35]);
             const pR = m4.tp(m, [ 0.48 + spread, 1.18 + spread * 1.1, -0.35]);
-            // Broad tilted-horizontal brush axis so painterly ink strokes show full calligraphic width from high downhill chase view!
             const sideL = v3.norm(m4.td(m, [0.92, 0.38, 0]));
             const sideR = v3.norm(m4.td(m, [0.92, -0.38, 0]));
             const alpha = R.trickActive ? 0.90 : 0.62;
@@ -220,14 +285,12 @@ const Particles = (() => {
             pushRibbonNode(0, pL, sideL, pal[shift % 3], alpha, width);
             pushRibbonNode(1, pR, sideR, pal[(shift + 1) % 3], alpha, width);
 
-            // Bold dark sumi-ink accent brush stroke trailing off rear tire during tricks!
             if (R.trickActive) {
               const pT = m4.tp(m, [0, 0.48, 0.72]);
               const sideV = v3.norm(m4.td(m, [1, 0, 0]));
               pushRibbonNode(2, pT, sideV, pal[(shift + 2) % 3], 0.80, 0.44);
             }
 
-            // Physical spray-paint / ink droplets breaking away from the brush strokes!
             if (Math.random() < 0.75 * qMul) {
               const pDrop = Math.random() < 0.5 ? pL : pR;
               const colDrop = Math.random() < 0.5 ? pal[0] : (Math.random() < 0.5 ? pal[1] : pal[2]);
@@ -244,40 +307,94 @@ const Particles = (() => {
         }
       }
 
-      // 2. Realistic water splash in mountain creeks OR sunlit rooster-tail dust plumes!
-      if (R.air || R.speed < 5) return;
+      if (R.air || R.speed < 3.5) {
+        tr.wasAir = true;
+        return;
+      }
+
+      // 2. Persistent Terrain-Hugging 3D Carved Tire Track / Creek Wake Nodes
       const m = Course.mountain;
       const fx = -Math.sin(R.yaw), fz = -Math.cos(R.yaw);
-      const bx = R.pos[0] - fx * 0.72, by = R.pos[1] + 0.14, bz = R.pos[2] - fz * 0.72;
-      const rate = (R.inCreek ? 72 : R.skid > 0 ? 64 : 24) * sat(R.speed / 22) * qMul;
+      const bx = R.pos[0] - fx * 0.68, bz = R.pos[2] - fz * 0.68;
+      const nodes = tr.nodes;
+      const prevN = nodes.length ? nodes[nodes.length - 1] : null;
+      if (!prevN || tr.wasAir || Math.hypot(bx - prevN.p[0], bz - prevN.p[2]) >= 0.55) {
+        const by = Course.height(bx, bz) + 0.055;
+        const nrm = Course.normal(bx, bz);
+        let sx = -fz * nrm[1], sy = fz * nrm[0] - fx * nrm[2], sz = fx * nrm[1];
+        const sLen = Math.hypot(sx, sy, sz);
+        const side = sLen > 0.01 ? [sx / sLen, sy / sLen, sz / sLen] : [Math.cos(R.yaw), 0, -Math.sin(R.yaw)];
+
+        const carve = clamp(Math.abs(R.roll) * 1.15 + (R.skid || 0) * 1.2 + (R.landGrace > 0.16 ? 0.55 : 0) + (R.inCreek ? 0.45 : 0), 0.15, 1.45);
+        const halfW = (0.16 + carve * 0.14) * (R.inCreek ? 1.55 : 1.0);
+        const alpha = clamp((R.isPlayer ? 0.62 : 0.44) + carve * 0.24, 0.15, 0.92);
+        const col = R.inCreek
+          ? (m.idx === 2 ? [1.65, 0.44, 0.08] : [0.84, 0.94, 0.98])
+          : (m.idx === 0 ? [0.34, 0.14, 0.07]
+            : m.idx === 1 ? [0.16, 0.10, 0.06]
+            : m.idx === 2 ? ((R.skid || 0) > 0.25 ? [0.68, 0.22, 0.07] : [0.07, 0.06, 0.07])
+            : [0.22, 0.19, 0.17]);
+
+        nodes.push({ p: [bx, by, bz], s: side, w: halfW, c: col, a: alpha, age: 0, brk: tr.wasAir });
+        const cap = R.isPlayer ? PLAYER_TRACK_SEGS : RIVAL_TRACK_SEGS;
+        if (nodes.length > cap) nodes.shift();
+        tr.wasAir = false;
+      }
+
+      // 3. Directional Carve-Side Rooster-Tail Dust/Mist + Crisp Ballistic Biome Debris Flecks
+      if (R.speed < 5) return;
+      const by = Course.height(bx, bz) + 0.14;
+      const rx = Math.cos(R.yaw), rz = -Math.sin(R.yaw);
+      const carveFactor = Math.abs(R.roll) * 1.4 + (R.skid || 0) * 1.6 + (R.landGrace > 0.15 ? 1.2 : 0);
+      const carveSide = Math.abs(R.roll) > 0.06 ? -sign(R.roll) : (Math.random() < 0.5 ? -1 : 1);
+      const rate = (R.inCreek ? 85 : 26 + carveFactor * 38) * sat(R.speed / 20) * qMul;
+
       if (Math.random() < rate * dt) {
         if (R.inCreek && m.idx !== 2) {
           for (let k = 0; k < 2; k++) {
             const sgn = k === 0 ? -1 : 1;
             spawn(
-              bx + sgn * 0.22, by + 0.06, bz,
-              sgn * (1.8 + Math.random() * 2.4) - fx * 1.4,
-              2.2 + Math.random() * 2.6,
-              -fz * 1.6 + (Math.random() - 0.5) * 1.4,
-              [0.84, 0.95, 1.0], 0.74, 0.16, 0.68, 0.40 + Math.random() * 0.24, 0.55
+              bx + rx * sgn * 0.22, by + 0.06, bz + rz * sgn * 0.22,
+              rx * sgn * (2.0 + Math.random() * 2.6) - fx * 1.4,
+              2.3 + Math.random() * 2.8,
+              rz * sgn * (2.0 + Math.random() * 2.6) - fz * 1.6,
+              [0.84, 0.95, 1.0], 0.76, 0.16, 0.72, 0.42 + Math.random() * 0.24, 0.55
             );
           }
         } else {
-          const spread = R.skid > 0 ? 2.8 : 1.1;
+          const latSpd = carveSide * (1.2 + carveFactor * 3.4) + (Math.random() - 0.5) * 1.6;
           spawn(
-            bx + (Math.random() - 0.5) * 0.30, by, bz + (Math.random() - 0.5) * 0.30,
-            -fx * (2.2 + Math.random() * 2.4) + (Math.random() - 0.5) * spread,
-            1.1 + Math.random() * (R.skid > 0 ? 3.0 : 1.4),
-            -fz * (2.2 + Math.random() * 2.4) + (Math.random() - 0.5) * spread,
-            R.inCreek ? [1.8, 0.55, 0.10] : m.dustCol, R.skid > 0 ? 0.58 : 0.32,
-            R.skid > 0 ? 0.34 : 0.22, R.skid > 0 ? 2.1 : 1.35,
-            0.52 + Math.random() * 0.38, 0.09
+            bx + (Math.random() - 0.5) * 0.28, by, bz + (Math.random() - 0.5) * 0.28,
+            -fx * (2.4 + Math.random() * 2.6) + rx * latSpd,
+            1.1 + Math.random() * (R.skid > 0 ? 3.2 : 1.5),
+            -fz * (2.4 + Math.random() * 2.6) + rz * latSpd,
+            R.inCreek ? [1.8, 0.55, 0.10] : m.dustCol, R.skid > 0 ? 0.62 : 0.34,
+            R.skid > 0 ? 0.34 : 0.24, R.skid > 0 ? 2.2 : 1.45,
+            0.52 + Math.random() * 0.38, 0.10
           );
+
+          // Crisp ballistic gravel/needle/ash flecks flying off rear tire knobbies!
+          if (Math.random() < (0.45 + carveFactor * 0.35)) {
+            const isSpark = m.idx === 2 && (carveFactor > 0.65 || R.inCreek) && Math.random() < 0.42;
+            const chipCol = isSpark ? [1.9, 0.52, 0.08]
+              : m.idx === 0 ? [0.66, 0.30, 0.14]
+              : m.idx === 1 ? [0.18, 0.24, 0.11]
+              : m.idx === 2 ? [0.18, 0.14, 0.14]
+              : [0.62, 0.56, 0.48];
+            const cLat = carveSide * (1.5 + Math.random() * 2.8);
+            spawn(
+              bx, by + 0.08, bz,
+              -fx * (3.0 + Math.random() * 3.0) + rx * cLat,
+              2.2 + Math.random() * 2.6,
+              -fz * (3.0 + Math.random() * 3.0) + rz * cLat,
+              chipCol, isSpark ? 0.95 : 0.88, 0.11 + Math.random() * 0.05, 0.03,
+              0.38 + Math.random() * 0.26, 0.85
+            );
+          }
         }
       }
     },
 
-    // Sunlit mist & spray rising from cascading cliff waterfalls
     emitWaterfalls(centerS, centerX, dt, quality = 'auto') {
       const qCfg = typeof Quality !== 'undefined' ? Quality.cfg(quality) : null;
       if (qCfg ? !qCfg.waterfallMist : (quality === 'low' || quality === 'smooth')) return;
@@ -304,7 +421,6 @@ const Particles = (() => {
       }
     },
 
-    // Biome atmospheric sunlit motes floating through the air (desert dust, pine pollen, lava embers, sea mist!)
     emitAmbient(focusPos, dt, quality = 'auto') {
       const qCfg = typeof Quality !== 'undefined' ? Quality.cfg(quality) : null;
       if ((qCfg ? !qCfg.ambientMotes : (quality === 'low' || quality === 'smooth')) || !focusPos) return;
@@ -315,19 +431,15 @@ const Particles = (() => {
       const y = focusPos[1] + (Math.random() - 0.2) * 14;
       const z = focusPos[2] - Math.random() * 48 + 8;
       if (bi === 2) {
-        // Rising glowing volcanic embers!
         spawn(x, y - 3, z, (Math.random() - 0.5) * 1.4, 2.2 + Math.random() * 2.5, (Math.random() - 0.5) * 1.4,
           [1.8, 0.58, 0.10], 0.92, 0.14, 0.03, 1.4 + Math.random() * 1.0, -0.05);
       } else if (bi === 1) {
-        // Sunlit forest pollen / floating pine needles
         spawn(x, y, z, (Math.random() - 0.5) * 1.2, -0.4 + Math.random() * 0.6, (Math.random() - 0.5) * 1.2,
           [0.96, 0.92, 0.74], 0.45, 0.10, 0.06, 1.8 + Math.random() * 1.2, 0.0);
       } else if (bi === 3) {
-        // Coastal sunlit sea-spray mist motes
         spawn(x, y, z, -1.2 + Math.random() * 0.8, 0.4 + Math.random() * 0.6, (Math.random() - 0.5) * 1.0,
           [0.94, 0.96, 1.0], 0.34, 0.24, 0.62, 1.5 + Math.random() * 0.9, 0.0);
       } else {
-        // Red Rock Canyon warm golden wind-blown dust motes
         spawn(x, y, z, 1.6 + Math.random() * 1.8, 0.2 + Math.random() * 0.5, (Math.random() - 0.5) * 1.0,
           [0.95, 0.72, 0.46], 0.36, 0.18, 0.55, 1.4 + Math.random() * 1.0, 0.0);
       }
@@ -335,15 +447,23 @@ const Particles = (() => {
 
     burstLand(pos, power = 1) {
       const m = Course.mountain;
-      const n = Math.min(26, Math.round(12 + power * 7));
+      const n = Math.min(28, Math.round(12 + power * 8));
       for (let i = 0; i < n; i++) {
-        const a = (i / n) * TAU + Math.random() * 0.3;
-        const spd = 2.2 + Math.random() * 4.2 * power;
+        const a = (i / n) * TAU + Math.random() * 0.25;
+        const spd = 2.4 + Math.random() * 4.5 * power;
         spawn(
           pos[0], pos[1] + 0.15, pos[2],
-          Math.cos(a) * spd, 1.3 + Math.random() * 2.8, Math.sin(a) * spd,
-          m.dustCol, 0.62, 0.32, 2.0, 0.62 + Math.random() * 0.38, 0.22
+          Math.cos(a) * spd, 1.0 + Math.random() * 2.2, Math.sin(a) * spd,
+          m.dustCol, 0.66, 0.34, 2.1, 0.62 + Math.random() * 0.36, 0.22
         );
+        if ((i & 1) === 0) {
+          const chipCol = m.idx === 2 ? [1.7, 0.48, 0.10] : m.idx === 1 ? [0.20, 0.26, 0.12] : m.dustCol;
+          spawn(
+            pos[0], pos[1] + 0.18, pos[2],
+            Math.cos(a) * spd * 1.35, 2.6 + Math.random() * 2.8, Math.sin(a) * spd * 1.35,
+            chipCol, 0.86, 0.14, 0.04, 0.42 + Math.random() * 0.24, 0.82
+          );
+        }
       }
     },
 
@@ -359,7 +479,6 @@ const Particles = (() => {
       }
     },
 
-    // Biome-specific debris shower on obstacle collision (pine needles, rock chips, volcanic embers, stucco dust!)
     burstDebris(kind, pos, dir = [0, -1]) {
       const dx = dir[0] || 0, dz = dir[1] || -1;
       const isFoliage = kind === 'pine' || kind === 'cactus';
@@ -437,7 +556,6 @@ const Particles = (() => {
           const A = nodes[i], B = nodes[i + 1];
           if (v3.len(v3.sub(B.p, A.p)) > 14) continue;
           const vA = sat(1 - A.age / 0.72), vB = sat(1 - B.age / 0.72);
-          // Organic calligraphic brush-width swell!
           const wA = A.w * (0.20 + 0.95 * Math.sin(vA * PI * 0.85));
           const wB = B.w * (0.20 + 0.95 * Math.sin(vB * PI * 0.85));
           const a0 = v3.mad(A.p, A.s, -wA), a1 = v3.mad(A.p, A.s, wA);
@@ -449,6 +567,50 @@ const Particles = (() => {
       ribVertCount = rv;
       if (gfx && ribVertCount > 0) {
         gfx.updateBuffer(ribVB, 0, ribVerts.subarray(0, ribVertCount * RIB_STRIDE));
+      }
+
+      // Age & triangulate persistent terrain-hugging 3D carved tire tracks
+      let tv = 0;
+      const emitTrk = (p, u, v, c, a) => {
+        if (tv >= MAX_TRK_VERTS) return;
+        const o = tv * RIB_STRIDE;
+        trkVerts[o] = p[0]; trkVerts[o + 1] = p[1]; trkVerts[o + 2] = p[2];
+        trkVerts[o + 3] = u; trkVerts[o + 4] = v;
+        trkVerts[o + 5] = c[0]; trkVerts[o + 6] = c[1]; trkVerts[o + 7] = c[2]; trkVerts[o + 8] = a;
+        tv++;
+      };
+      for (let s = 0; s < MAX_TRACK_RIDERS; s++) {
+        const nodes = trackSlots[s].nodes;
+        const ttl = s === 0 ? 5.5 : 3.2;
+        for (let i = nodes.length - 1; i >= 0; i--) {
+          nodes[i].age += dt;
+          if (nodes[i].age > ttl) nodes.splice(i, 1);
+        }
+        if (nodes.length < 2) continue;
+        for (let i = 0; i < nodes.length - 1; i++) {
+          const A = nodes[i], B = nodes[i + 1];
+          if (B.brk) continue;
+          const dx = B.p[0] - A.p[0], dy = B.p[1] - A.p[1], dz = B.p[2] - A.p[2];
+          if (dx * dx + dy * dy + dz * dz > 20.25) continue;
+          const headFadeA = i >= nodes.length - 2 ? 0.55 : 1.0;
+          const headFadeB = i >= nodes.length - 2 ? 0.25 : 1.0;
+          const vA = sat(1 - A.age / ttl) * headFadeA;
+          const vB = sat(1 - B.age / ttl) * headFadeB;
+          const a0 = v3.mad(A.p, A.s, -A.w), a1 = v3.mad(A.p, A.s, A.w);
+          const b0 = v3.mad(B.p, B.s, -B.w), b1 = v3.mad(B.p, B.s, B.w);
+          emitTrk(a0, 0, vA, A.c, A.a); emitTrk(a1, 1, vA, A.c, A.a); emitTrk(b1, 1, vB, B.c, B.a);
+          emitTrk(a0, 0, vA, A.c, A.a); emitTrk(b1, 1, vB, B.c, B.a); emitTrk(b0, 0, vB, B.c, B.a);
+        }
+      }
+      trackVertCount = tv;
+      if (gfx && trackVertCount > 0) {
+        gfx.updateBuffer(trkVB, 0, trkVerts.subarray(0, trackVertCount * RIB_STRIDE));
+      }
+    },
+
+    drawTracks() {
+      if (trkPipe && trackVertCount > 0) {
+        gfx.draw(trkPipe, { vb: [trkVB], count: trackVertCount });
       }
     },
 
@@ -469,5 +631,6 @@ const Particles = (() => {
     },
 
     ribbonCount: () => ribVertCount,
+    trackCount: () => trackVertCount,
   };
 })();
