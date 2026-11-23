@@ -10,10 +10,11 @@ const Wildlife = (() => {
   }
 
   function targetCount(quality) {
-    if (quality === 'smooth') return 1;
+    if (typeof Quality !== 'undefined') return Quality.cfg(quality).wildlife;
+    if (quality === 'low' || quality === 'smooth') return 1;
     if (quality === 'balanced') return 2;
     if (quality === 'high') return 3;
-    return 2; // auto: sparse occasional 1-2 creatures so world feels natural & uncrowded
+    return 2;
   }
 
   function spawnOne(centerS, idx, centerX = null) {

@@ -6,13 +6,13 @@ const Sound = (() => {
   }
 
   let ctx = null, master = null, sfxBus = null, musicBus = null;
-  let muted = false, sfxVol = 0.78, musicVol = 0.62;
+  let muted = false, sfxVol = 0.76, musicVol = 0.84;
   let M = null;
   let rig = null;
   let ratchetAccum = 0;
 
   try {
-    const saved = JSON.parse(localStorage.getItem('crazybike_audio_v2') || 'null');
+    const saved = JSON.parse(localStorage.getItem('crazybike_audio_v3') || 'null');
     if (saved) {
       if (typeof saved.muted === 'boolean') muted = saved.muted;
       if (typeof saved.sfxVol === 'number') sfxVol = clamp(saved.sfxVol, 0, 1);
@@ -21,7 +21,7 @@ const Sound = (() => {
   } catch (_) {}
 
   function savePrefs() {
-    try { localStorage.setItem('crazybike_audio_v2', JSON.stringify({ muted, sfxVol, musicVol })); } catch (_) {}
+    try { localStorage.setItem('crazybike_audio_v3', JSON.stringify({ muted, sfxVol, musicVol })); } catch (_) {}
   }
 
   function applyVolumes() {
@@ -139,11 +139,12 @@ const Sound = (() => {
     }
     ceil.curve = cv;
     master = gain(muted ? 0 : 0.72);
+    const pre = gain(1 / 1.45);
     sfxBus = gain(sfxVol);
     musicBus = gain(musicVol);
     sfxBus.connect(comp);
     musicBus.connect(comp);
-    chain(comp, master, ceil, ac.destination);
+    chain(comp, master, pre, ceil, ac.destination);
 
     // ---- 1. Binaural Helmet Wind Roar Rig (Kellet pink noise + independent L/R ear buffeting!) ----
     const pink = loop(M.pink, 1, 0.2);
@@ -406,11 +407,11 @@ const Sound = (() => {
       return;
     }
 
-    const windPreset = (typeof Variants !== 'undefined' && Variants.val.wind === 'a') ? 0.65
-      : (typeof Variants !== 'undefined' && Variants.val.wind === 'c') ? 1.45 : 1.05;
+    const windPreset = (typeof Variants !== 'undefined' && Variants.val.wind === 'a') ? 0.55
+      : (typeof Variants !== 'undefined' && Variants.val.wind === 'c') ? 1.25 : 0.85;
 
-    // Gentle high-mountain ridge air audible on Title Start Gate & Pause!
-    rig.mG.gain.setTargetAtTime((ambientOnly ? 0.055 : 0.032) * windPreset, now, 0.12);
+    // Gentle high-mountain ridge air audible on Title Start Gate & Pause (calibrated against Cold Smoke)
+    rig.mG.gain.setTargetAtTime((ambientOnly ? 0.024 : 0.015) * windPreset, now, 0.14);
 
     if (!active || !R || R.crashed) {
       rig.wG.gain.setTargetAtTime(0, now, 0.08);
@@ -423,26 +424,27 @@ const Sound = (() => {
 
     const spd = R.speed || 0;
     const spdN = sat(spd / 35);
-    const airBoost = R.air ? 0.28 : 0;
-    const boostAdd = R.boosting ? 0.22 : 0;
-    const wLevel = sat(spdN * 0.92 + airBoost + boostAdd);
+    const u = clamp(spd / 34, 0, 1.35);
+    const uk = Math.min(u, 1);
 
-    // 1. Binaural Pink-Noise Wind Roar (deep rumble + opening high shelf + faster ear buffeting at 120km/h!)
-    rig.wL1.frequency.setTargetAtTime(190 + wLevel * 1250, now, 0.05);
-    rig.wL2.frequency.setTargetAtTime(240 + wLevel * 1680, now, 0.05);
-    rig.wSh.gain.setTargetAtTime(lerp(-9, 3.5, wLevel), now, 0.06);
-    rig.wG.gain.setTargetAtTime((0.02 + Math.pow(wLevel, 1.55) * 0.58) * windPreset, now, 0.05);
-    rig.wGd.gain.setTargetAtTime((0.03 + wLevel * 0.14) * windPreset, now, 0.08);
-    rig.wLfo.playbackRate.setTargetAtTime((110 + spd * 7.5) / rig.sr, now, 0.08);
-    const earDepth = 0.22 + wLevel * 0.28;
+    // 1. Binaural Pink-Noise Wind Roar (Cold-Smoke warm rolloff under ~950 Hz + negative high-shelf)
+    const fw = 240 + 640 * Math.pow(uk, 1.15);
+    rig.wL1.frequency.setTargetAtTime(fw, now, 0.06);
+    rig.wL2.frequency.setTargetAtTime(fw * 1.12, now, 0.06);
+    rig.wSh.gain.setTargetAtTime(lerp(-8.5, -2.5, smooth(0.18, 0.95, uk)), now, 0.06);
+    const wl = (0.012 + Math.pow(u, 2.05) * 0.24) * windPreset * (R.air ? 1.12 : 1.0) * (R.boosting ? 1.08 : 1.0);
+    rig.wG.gain.setTargetAtTime(wl, now, 0.06);
+    rig.wGd.gain.setTargetAtTime((0.008 + Math.pow(uk, 1.8) * 0.042) * windPreset, now, 0.10);
+    rig.wLfo.playbackRate.setTargetAtTime((80 + spd * 5.2) / rig.sr, now, 0.08);
+    const earDepth = 0.18 + uk * 0.20;
     rig.wDep[0].gain.setTargetAtTime(earDepth, now, 0.08);
     rig.wDep[1].gain.setTargetAtTime(earDepth, now, 0.08);
-    if (rig.wBal.pan) rig.wBal.pan.setTargetAtTime(clamp(-(R.steer || 0) * 0.25, -0.35, 0.35), now, 0.08);
+    if (rig.wBal.pan) rig.wBal.pan.setTargetAtTime(clamp(-(R.steer || 0) * 0.22, -0.30, 0.30), now, 0.08);
 
-    // 2. Aerodynamic helmet/spoke wind whistle (>70 km/h or big air!)
-    const wh = smooth(0.46, 1.0, spdN + (R.air ? 0.22 : 0));
-    rig.hBP.frequency.setTargetAtTime(760 + spdN * 1150 + (R.air ? 280 : 0), now, 0.06);
-    rig.hG.gain.setTargetAtTime(wh * wh * 0.055 * windPreset, now, 0.06);
+    // 2. Subtle high-speed aerodynamic helmet/spoke whistle (tucked cleanly under wind)
+    const wh = smooth(0.58, 1.05, spdN + (R.air ? 0.15 : 0));
+    rig.hBP.frequency.setTargetAtTime(760 + spdN * 950 + (R.air ? 220 : 0), now, 0.08);
+    rig.hG.gain.setTargetAtTime(wh * wh * 0.020 * windPreset, now, 0.08);
 
     // 3. Granular tire-on-dirt roll & stereo gravel skid screech
     const onG = R.air ? 0 : 1;
@@ -489,6 +491,7 @@ const Sound = (() => {
     setSfxVol(v) { sfxVol = clamp(+v, 0, 1); applyVolumes(); savePrefs(); },
     setMusicVol(v) { musicVol = clamp(+v, 0, 1); applyVolumes(); savePrefs(); },
     getPrefs: () => ({ muted, sfxVol, musicVol }),
+    getMixProfile: () => ({ sfxVol, musicVol, windMaxGain: 0.24 * 0.85, windShelfMaxDb: -2.5 }),
     isMuted: () => muted,
   };
 })();

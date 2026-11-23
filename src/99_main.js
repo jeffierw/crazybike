@@ -9,18 +9,9 @@ const App = (() => {
   let garageAngle = 0.65;
   let trackRec = [], trackAcc = 0, koPoints = [];
 
-  let quality = 'auto';
-  try {
-    const q = localStorage.getItem('crazybike_quality');
-    if (q === 'auto' || q === 'high' || q === 'balanced' || q === 'smooth') quality = q;
-  } catch (_) {}
-
   function dprForQuality() {
     const raw = devicePixelRatio || 1;
-    if (quality === 'high') return Math.min(raw, 2.0);
-    if (quality === 'balanced') return Math.min(raw, 1.25);
-    if (quality === 'smooth') return Math.min(raw, 0.85);
-    return Math.min(raw, 1.55);
+    return Math.min(raw, Quality.cfg().dprCap);
   }
 
   let bannerText = '', bannerCol = '#ffd08a', bannerT = 0;
@@ -85,7 +76,7 @@ const App = (() => {
     Terrain.reset();
     Terrain.update(12);
     Wildlife.reset();
-    Wildlife.step(12, 1 / 60, quality);
+    Wildlife.step(12, 1 / 60, Quality.tier);
   }
 
   function startRun(mountainId, modeId, seed, diff, eventObj = null, seamlessFromTitle = false, solo = false) {
@@ -104,7 +95,7 @@ const App = (() => {
     Particles.clear();
     Combat.reset();
     Wildlife.reset();
-    Wildlife.step(12, 1 / 60, quality);
+    Wildlife.step(12, 1 / 60, Quality.tier);
     raceTime = 0;
     trackRec = [];
     trackAcc = 0;
@@ -292,11 +283,11 @@ const App = (() => {
       }
     }
 
-    for (let i = 0; i < allRiders.length; i++) Particles.emitTire(allRiders[i], simDt, quality);
-    Particles.emitAmbient(player.pos, simDt, quality);
-    Particles.emitWaterfalls(player.s, player.pos[0], simDt, quality);
+    for (let i = 0; i < allRiders.length; i++) Particles.emitTire(allRiders[i], simDt, Quality.tier);
+    Particles.emitAmbient(player.pos, simDt, Quality.tier);
+    Particles.emitWaterfalls(player.s, player.pos[0], simDt, Quality.tier);
     Particles.step(simDt);
-    Wildlife.step(player.s, simDt, quality, player.pos[0]);
+    Wildlife.step(player.s, simDt, Quality.tier, player.pos[0]);
     Sound.update(player, dt, 'race');
     Music.step(dt, Feel.speedNorm, player.adrenaline / 100, Course.mountain.idx);
     Feel.step(player, dt);
@@ -363,7 +354,7 @@ const App = (() => {
       Terrain.update(player.s, player.pos[0]);
       cam = Photo.step(dt, aspect);
       focusPos = [player.pos[0], player.pos[1], player.pos[2] - 12];
-      Props.emit(player.s, time, quality, player.pos[0], cam.eye);
+      Props.emit(player.s, time, Quality.tier, player.pos[0], cam.eye);
       Wildlife.emit();
       for (let i = 0; i < allRiders.length; i++) {
         if (Math.abs(allRiders[i].s - player.s) < 250) BikeMesh.emitRider(allRiders[i], time);
@@ -373,7 +364,7 @@ const App = (() => {
       Terrain.update(player.s, player.pos[0]);
       cam = Camera.update(player, dt, aspect, Feel, state === 'pause');
       focusPos = [player.pos[0], player.pos[1], player.pos[2] - 14];
-      Props.emit(player.s, time, quality, player.pos[0], cam.eye);
+      Props.emit(player.s, time, Quality.tier, player.pos[0], cam.eye);
       Wildlife.emit();
       for (let i = 0; i < allRiders.length; i++) {
         if (Math.abs(allRiders[i].s - player.s) < 250) BikeMesh.emitRider(allRiders[i], time);
@@ -391,11 +382,11 @@ const App = (() => {
       Terrain.update(12, titleRider.pos[0]);
       cam = Camera.titleView(titleRider, dt, aspect, time);
       focusPos = [titleRider.pos[0], titleRider.pos[1], titleRider.pos[2] - 14];
-      Wildlife.step(12, dt, quality, titleRider.pos[0]);
-      Particles.emitAmbient(focusPos, dt, quality);
-      Particles.emitWaterfalls(12, titleRider.pos[0], dt, quality);
+      Wildlife.step(12, dt, Quality.tier, titleRider.pos[0]);
+      Particles.emitAmbient(focusPos, dt, Quality.tier);
+      Particles.emitWaterfalls(12, titleRider.pos[0], dt, Quality.tier);
       Particles.step(dt);
-      Props.emit(12, time, quality, titleRider.pos[0], cam.eye);
+      Props.emit(12, time, Quality.tier, titleRider.pos[0], cam.eye);
       Wildlife.emit();
       BikeMesh.emitRider(titleRider, time);
       for (let i = 0; i < titleRivals.length; i++) BikeMesh.emitRider(titleRivals[i], time);
@@ -442,7 +433,7 @@ const App = (() => {
     setLoadProgress(0.38, '点亮天空与光影');
     gfx = await createGfx(canvas);
     Post.init(gfx);
-    Post.setQuality(quality);
+    Post.setQuality(Quality.tier);
     Sky.init(gfx);
     Terrain.init(gfx);
 
@@ -517,11 +508,10 @@ const App = (() => {
       finishEndlessNow() {
         if (state === 'race' && Course.mode.endless) finalizeRun();
       },
-      getQuality: () => quality,
+      getQuality: () => Quality.pick,
       setQuality(q) {
-        quality = q;
-        Post.setQuality(q);
-        try { localStorage.setItem('crazybike_quality', q); } catch (_) {}
+        const tier = Quality.select(q);
+        Post.setQuality(tier);
       },
     });
 
@@ -568,8 +558,10 @@ const App = (() => {
       riderVerts: () => (RiderMesh.info() ? RiderMesh.info().nv : 0),
       startEvent: idx => { const ev = Career.EVENTS[idx] || Career.EVENTS[0]; startRun(ev.mountainId, ev.modeId, ev.seed, ev.diff, ev, false, false); },
       startEndless: (mId = 'redrock', seed = 202611, solo = true) => startRun(mId, 'endless', seed, 1.2, null, false, solo),
-      quality: () => quality,
-      setQuality: q => { quality = q; Post.setQuality(q); },
+      quality: () => Quality.pick,
+      qualityTier: () => Quality.tier,
+      qualityInfo: () => Quality.info(),
+      setQuality: q => { const tier = Quality.select(q); Post.setQuality(tier); },
       wildlifeCount: () => Wildlife.count(),
       finishNow: () => finalizeRun(),
       career: () => Career.data,

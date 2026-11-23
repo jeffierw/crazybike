@@ -74,10 +74,11 @@ const UI = (() => {
       const mList = MOUNTAINS;
       const qualOpts = [
         ['auto', bi('自动', 'Auto')],
-        ['high', bi('高', 'High')],
+        ['low', bi('低画质', 'Low')],
         ['balanced', bi('均衡', 'Balanced')],
-        ['smooth', bi('流畅', 'Smooth')],
+        ['high', bi('高画质', 'High')],
       ];
+      const qualDesc = typeof Quality !== 'undefined' ? Quality.describe(I18N.lang) : '';
       body = `
         <div class="rail-kicker">SETTINGS · ${t('设置')}</div>
         <div class="rail-title">${t('设置')}</div>
@@ -107,6 +108,7 @@ const UI = (() => {
               <button class="pill ${curQual === id ? 'on' : ''}" data-qual="${id}">${lbl}</button>
             `).join('')}
           </div>
+          ${qualDesc ? `<div id="qual-desc" style="font-size:11px;color:var(--dim);margin-top:8px;line-height:1.55;">${qualDesc}</div>` : ''}
         </div>
 
         <div class="rail-sec">
@@ -261,7 +263,7 @@ const UI = (() => {
             <button id="t-endless" class="rail-item"><span>${t('无尽暴走')}</span><small>#TODAY · ${endlessSolo ? 'SOLO' : 'AI'}</small></button>
             <button id="t-garage" class="rail-item"><span>${t('改装车库')}</span><small>$${c.cash}</small></button>
             <button id="t-views" class="rail-item"><span>${t('视角')}</span><small>${viewName(Camera.currentView())}</small></button>
-            <button id="t-settings" class="rail-item"><span>${t('设置')}</span><small>${bi(actions.getQuality ? actions.getQuality().toUpperCase() : 'AUTO', actions.getQuality ? actions.getQuality().toUpperCase() : 'AUTO')} · ${I18N.lang.toUpperCase()}</small></button>
+            <button id="t-settings" class="rail-item"><span>${t('设置')}</span><small>${(typeof Quality !== 'undefined' ? Quality.pick : (actions.getQuality ? actions.getQuality() : 'auto')).toUpperCase()}→${(typeof Quality !== 'undefined' ? Quality.tier : 'HIGH').toUpperCase()} · ${I18N.lang.toUpperCase()}</small></button>
             <button id="t-controls" class="rail-item"><span>${t('操作说明')}</span><small>WASD / PAD</small></button>
           </div>
         </div>
@@ -649,13 +651,14 @@ const UI = (() => {
   // ---- 6. Translucent Left-Rail Pause Menu (Right 65% Wide Open for 360-Orbit + 1-Click Mountain & Quality Switch!) ----
   function renderPause() {
     if (subMenu !== 'main') return renderSubRail('pause');
-    const curQual = actions.getQuality ? actions.getQuality() : 'auto';
+    const curQual = actions.getQuality ? actions.getQuality() : (typeof Quality !== 'undefined' ? Quality.pick : 'auto');
     const qualOpts = [
       ['auto', bi('自动', 'Auto')],
-      ['high', bi('高', 'High')],
+      ['low', bi('低画质', 'Low')],
       ['balanced', bi('均衡', 'Balanced')],
-      ['smooth', bi('流畅', 'Smooth')],
+      ['high', bi('高画质', 'High')],
     ];
+    const qualDesc = typeof Quality !== 'undefined' ? Quality.describe(I18N.lang) : '';
     root().innerHTML = `
       <div class="scrim-left"></div>
       ${cornerToolsHtml()}
@@ -680,6 +683,7 @@ const UI = (() => {
               <button class="pill ${curQual === id ? 'on' : ''}" data-pqual="${id}">${lbl}</button>
             `).join('')}
           </div>
+          ${qualDesc ? `<div id="pqual-desc" style="font-size:11px;color:var(--dim);margin-top:6px;line-height:1.45;">${qualDesc}</div>` : ''}
         </div>
 
         <button id="p-photo" class="rail-item"><span>📷 ${t('拍照模式')}</span><small>P</small></button>

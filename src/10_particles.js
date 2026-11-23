@@ -191,7 +191,8 @@ const Particles = (() => {
         return;
       }
 
-      const qMul = quality === 'smooth' ? 0.45 : quality === 'balanced' ? 0.78 : quality === 'high' ? 1.35 : 1.0;
+      const qMul = typeof Quality !== 'undefined' ? Quality.cfg(quality).particleMul
+        : (quality === 'low' || quality === 'smooth') ? 0.42 : quality === 'balanced' ? 0.78 : quality === 'high' ? 1.35 : 1.0;
 
       // 1. Expressive Painterly Ink-Brush Ribbons & Spray-Paint Droplets during committed air tricks or overdrive!
       if (R.isPlayer) {
@@ -278,10 +279,11 @@ const Particles = (() => {
 
     // Sunlit mist & spray rising from cascading cliff waterfalls
     emitWaterfalls(centerS, centerX, dt, quality = 'auto') {
-      if (quality === 'smooth') return;
+      const qCfg = typeof Quality !== 'undefined' ? Quality.cfg(quality) : null;
+      if (qCfg ? !qCfg.waterfallMist : (quality === 'low' || quality === 'smooth')) return;
       const drops = Course.dropsNear(Math.max(0, centerS - 18), centerS + 165);
       const bi = Course.mountain.idx;
-      const prob = quality === 'high' ? 1.0 : quality === 'balanced' ? 0.55 : 0.8;
+      const prob = qCfg ? qCfg.waterfallProb : (quality === 'high' ? 1.0 : quality === 'balanced' ? 0.55 : 0.8);
       for (let i = 0; i < drops.length; i++) {
         const dr = drops[i];
         const ck = Course.creekAt(dr.s);
@@ -304,8 +306,9 @@ const Particles = (() => {
 
     // Biome atmospheric sunlit motes floating through the air (desert dust, pine pollen, lava embers, sea mist!)
     emitAmbient(focusPos, dt, quality = 'auto') {
-      if (quality === 'smooth' || !focusPos) return;
-      const rate = quality === 'high' ? 36 : quality === 'balanced' ? 14 : 24;
+      const qCfg = typeof Quality !== 'undefined' ? Quality.cfg(quality) : null;
+      if ((qCfg ? !qCfg.ambientMotes : (quality === 'low' || quality === 'smooth')) || !focusPos) return;
+      const rate = qCfg ? qCfg.ambientRate : (quality === 'high' ? 36 : quality === 'balanced' ? 14 : 24);
       if (Math.random() > rate * dt) return;
       const bi = Course.mountain.idx;
       const x = focusPos[0] + (Math.random() - 0.5) * 44;

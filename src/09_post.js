@@ -93,10 +93,11 @@ const Post = (() => {
     },
 
     setQuality(q) {
-      const wantShadow = q === 'high' ? 2048 : q === 'smooth' ? 512 : 1024;
-      bloomAmt = q === 'high' ? 1.0 : q === 'balanced' ? 0.38 : q === 'smooth' ? 0.0 : 0.72;
-      sunGlareAmt = q === 'high' ? 1.0 : q === 'balanced' ? 0.45 : q === 'smooth' ? 0.0 : 0.72;
-      if (gfx && wantShadow !== shadowSize) buildShadow(wantShadow);
+      const cfg = (typeof Quality !== 'undefined') ? Quality.cfg(q)
+        : { shadowSize: q === 'high' ? 2048 : (q === 'low' || q === 'smooth') ? 512 : 1024, bloom: q === 'high' ? 1.0 : q === 'balanced' ? 0.42 : 0.0, sunGlare: q === 'high' ? 1.0 : q === 'balanced' ? 0.48 : 0.0 };
+      bloomAmt = cfg.bloom;
+      sunGlareAmt = cfg.sunGlare;
+      if (gfx && cfg.shadowSize !== shadowSize) buildShadow(cfg.shadowSize);
     },
 
     ensureSize(w, h) {

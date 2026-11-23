@@ -90,7 +90,8 @@ const Props = (() => {
   function emitBiomeDetails(s0, s1, time, quality, centerX = null) {
     const bi = Course.mountain.idx;
     const isEndless = Course.mode.endless && centerX !== null && centerX !== undefined;
-    const step = quality === 'smooth' ? 28 : quality === 'balanced' ? 18 : quality === 'high' ? 11 : 14;
+    const step = typeof Quality !== 'undefined' ? Quality.cfg(quality).detailStep
+      : ((quality === 'low' || quality === 'smooth') ? 28 : quality === 'balanced' ? 18 : quality === 'high' ? 11 : 14);
     const i0 = Math.max(2, Math.floor(s0 / step));
     const i1 = Math.floor(s1 / step);
 
@@ -223,7 +224,8 @@ const Props = (() => {
   }
 
   function emit(centerS, time, quality = 'auto', centerX = null, camEye = null) {
-    const farDist = quality === 'smooth' ? 195 : quality === 'high' ? 285 : 245;
+    const farDist = typeof Quality !== 'undefined' ? Quality.cfg(quality).farDist
+      : ((quality === 'low' || quality === 'smooth') ? 185 : quality === 'high' ? 290 : 235);
     const s0 = Math.max(0, centerS - 28);
     const s1 = centerS + farDist;
 

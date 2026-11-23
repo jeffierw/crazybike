@@ -139,14 +139,14 @@ const Music = (() => {
     if (!ac || !busFilter || !bus) return;
     const now = ac.currentTime;
     if (mode === 'race') {
-      busFilter.frequency.setTargetAtTime(2400, now, 0.24);
-      bus.gain.setTargetAtTime(0.46, now, 0.22);
+      busFilter.frequency.setTargetAtTime(2750, now, 0.24);
+      bus.gain.setTargetAtTime(0.68, now, 0.22);
     } else if (mode === 'title') {
-      busFilter.frequency.setTargetAtTime(1150, now, 0.30);
-      bus.gain.setTargetAtTime(0.38, now, 0.28);
+      busFilter.frequency.setTargetAtTime(1480, now, 0.30);
+      bus.gain.setTargetAtTime(0.56, now, 0.28);
     } else if (mode === 'pause') {
-      busFilter.frequency.setTargetAtTime(620, now, 0.22);
-      bus.gain.setTargetAtTime(0.24, now, 0.22);
+      busFilter.frequency.setTargetAtTime(820, now, 0.22);
+      bus.gain.setTargetAtTime(0.36, now, 0.22);
     } else {
       bus.gain.setTargetAtTime(0.0, now, 0.18);
     }
@@ -159,10 +159,10 @@ const Music = (() => {
       pinkBuf = mat ? mat.pink : null;
       busFilter = ac.createBiquadFilter();
       busFilter.type = 'lowpass';
-      busFilter.frequency.value = 1150;
+      busFilter.frequency.value = 1480;
       busFilter.Q.value = 0.65;
       bus = ac.createGain();
-      bus.gain.value = 0.38;
+      bus.gain.value = 0.56;
       busFilter.connect(bus);
       bus.connect(outBus);
       applyModeFilter();
@@ -205,13 +205,13 @@ const Music = (() => {
         trigVinylDust(t);
 
         // Lush Rhodes 9th chord every bar (plus gentle syncopated re-voicing on beat 3.5)
-        if (s === 0) trigRhodes(t, chord, baseStep * 15, isRace ? 0.056 : 0.050);
-        else if (s === 10 && isRace) trigRhodes(t, chord.slice(1), baseStep * 6, 0.032);
+        if (s === 0) trigRhodes(t, chord, baseStep * 15, isRace ? 0.068 : 0.060);
+        else if (s === 10 && isRace) trigRhodes(t, chord.slice(1), baseStep * 6, 0.038);
 
         // Warm round upright/sub bass on root & fifth
-        if (s === 0) trigSubBass(t, chord[0], baseStep * 7.5, isRace ? 0.16 : 0.12);
-        else if (s === 7 && isRace) trigSubBass(t, chord[0], baseStep * 3.5, 0.11);
-        else if (s === 10) trigSubBass(t, chord[2] - 12, baseStep * 5.0, isRace ? 0.12 : 0.09);
+        if (s === 0) trigSubBass(t, chord[0], baseStep * 7.5, isRace ? 0.19 : 0.14);
+        else if (s === 7 && isRace) trigSubBass(t, chord[0], baseStep * 3.5, 0.125);
+        else if (s === 10) trigSubBass(t, chord[2] - 12, baseStep * 5.0, isRace ? 0.135 : 0.10);
 
         if (isRace) {
           // Laid-back boom-bap lo-fi drums: cozy head-nodding groove that never gets harsh!
