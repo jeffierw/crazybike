@@ -288,6 +288,62 @@ vm.runInContext(`
   assert(koCrashed && koRespawned && shoveNotCrashed,
     'V5 Combat Knockdown Toggle OK (ON: ragdoll->respawn, OFF: shove-only, obstacles remain zero-crash)');
 
+  // 7. V6 Live Camera Preview, Upright Mid-Trick Respawn, Pickups, Punch vs Flying-Kick Knockdown, Scenery & Prop Collision FX
+  Course.init('redrock', 'freeride', 202611);
+  Camera.reset(); Camera.setView('fpv'); Camera.resetOrbit(); Camera.snapNext();
+  const prevFpvCam = Camera.update(Physics.createRider({ isPlayer: true, s: 12, u: 0, initSpeed: 0 }), 1 / 60, 16 / 9, Feel, true, true);
+  const fpvPreviewOk = RiderMesh.fpvRiderId === 0 && !prevFpvCam.vp.some(x => !Number.isFinite(x));
+  Camera.setView('chase');
+
+  // Mid-trick knockdown respawn must completely clear trickYaw / trickPitch / trickRoll / steer / roll!
+  const RK = Physics.createRider({ isPlayer: true, s: 70, u: 2, initSpeed: 28 });
+  RK.trickType = 'tabletop'; RK.trickRoll = 1.05; RK.trickYaw = 0.92; RK.trickPitch = -0.6; RK.steer = 0.78; RK.roll = -0.55;
+  Physics.knockdownRider(RK, 'kick_ko', 8, -3);
+  for (let i = 0; i < 85; i++) Physics.stepRider(RK, { pedal: true }, 1 / 60, i / 60);
+  const uprightOk = !RK.crashed && RK.trickYaw === 0 && RK.trickRoll === 0 && RK.trickPitch === 0 && Math.abs(RK.roll) < 0.05;
+
+  // Pickups: initial bottles === 0 (no free passive refill), pickup nitro/bottle along course works, bottle tracking bounded <= 26m, bump/punch NO crash vs kick KO!
+  const PP = Physics.createRider({ isPlayer: true, s: 12, u: 0, initSpeed: 24 });
+  const initZeroBottles = PP.bottles === 0;
+  const pks = Course.pickupsNear(20, 220);
+  const nitroPk = pks.find(p => p.kind === 'nitro') || pks[0];
+  const bottlePk = pks.find(p => p.kind === 'bottle') || pks[0];
+  Combat.reset();
+  if (nitroPk) { PP.pos = [nitroPk.x, nitroPk.y - 0.8, nitroPk.z]; PP.s = nitroPk.s; Combat.step([PP], 1 / 60, 1); }
+  const nitroGained = PP.adrenaline > 25;
+  if (bottlePk) { PP.pos = [bottlePk.x, bottlePk.y - 0.8, bottlePk.z]; PP.s = bottlePk.s; Combat.step([PP], 1 / 60, 1.1); }
+  const bottleGained = PP.bottles >= 1;
+
+  // Punch NEVER knocks down; boost bump NEVER knocks down; Flying Kick DOES knock down!
+  const RAtt = Physics.createRider({ isPlayer: true, s: 100, u: 0, initSpeed: 28 });
+  const RVic = Physics.createRider({ isPlayer: false, s: 100.8, u: 1.4, initSpeed: 26 });
+  RAtt.boosting = true;
+  Combat.step([RAtt, RVic], 1 / 60, 2.0);
+  const bumpNoKo = !RVic.crashed;
+  Combat.tryAttack(RAtt, 1, [RAtt, RVic], 2.1, 'punch');
+  const punchNoKo = !RVic.crashed && RAtt.attackKind === 'punch';
+  RAtt.attackCd = 0;
+  Combat.tryAttack(RAtt, 1, [RAtt, RVic], 2.6, 'kick');
+  const kickDoesKo = RVic.crashed === true && RAtt.attackKind === 'kick';
+
+  // Prop collision sway & debris emitter across all 4 biomes
+  Solid.clear();
+  for (let bi = 0; bi < MOUNTAINS.length; bi++) {
+    Course.init(MOUNTAINS[bi].id, 'freeride', 202611 + bi);
+    const obs0 = Course.obstaclesNear(40, 140)[0];
+    if (obs0) {
+      Props.onHit(obs0, 0.8, -0.6, 26);
+      Particles.burstDebris(obs0.kind, [obs0.x, obs0.y + 1, obs0.z], [0.8, -0.6]);
+    }
+    Props.emit(80, 1.5, 'high');
+    Wildlife.step(80, 0.2, 'high'); Wildlife.emit();
+  }
+  Solid.upload();
+
+  assert(fpvPreviewOk && uprightOk && initZeroBottles && pks.length >= 2 && nitroGained && bottleGained &&
+    bumpNoKo && punchNoKo && kickDoesKo && Combat.MAX_BOTTLE_TRACK <= 26 && Props.activeHitCount() >= 1,
+    'V6 CamPreview, UprightRespawn, Pickups (' + pks.length + ' items), StrictKO (bump=' + (!bumpNoKo) + ', punch=' + (!punchNoKo) + ', kick=' + kickDoesKo + '), Flora/PropHit OK');
+
   if (failures > 0) process.exit(1);
-  console.log('\\nALL CRAZYBIKE V5 CHECKS PASSED!');
+  console.log('\\nALL CRAZYBIKE V6 CHECKS PASSED!');
 `, ctx);

@@ -359,6 +359,36 @@ const Particles = (() => {
       }
     },
 
+    // Biome-specific debris shower on obstacle collision (pine needles, rock chips, volcanic embers, stucco dust!)
+    burstDebris(kind, pos, dir = [0, -1]) {
+      const dx = dir[0] || 0, dz = dir[1] || -1;
+      const isFoliage = kind === 'pine' || kind === 'cactus';
+      const isEmber = kind === 'ember';
+      const isWood = kind === 'house' || kind === 'barrier' || kind === 'lamp';
+      const col = isFoliage ? [0.14, 0.38, 0.14]
+        : isEmber ? [1.9, 0.48, 0.08]
+        : isWood ? [0.82, 0.62, 0.42]
+        : (Course.mountain.idx === 0 ? [0.68, 0.30, 0.15] : [0.42, 0.40, 0.38]);
+      const count = isFoliage ? 24 : 18;
+      for (let i = 0; i < count; i++) {
+        const a = Math.random() * TAU;
+        const spd = 2.0 + Math.random() * 5.8;
+        const yOff = isFoliage ? (1.6 + Math.random() * 2.4) : (0.6 + Math.random() * 1.2);
+        spawn(
+          pos[0] + (Math.random() - 0.5) * 0.8,
+          pos[1] + yOff,
+          pos[2] + (Math.random() - 0.5) * 0.8,
+          dx * 3.5 + Math.cos(a) * spd,
+          (isFoliage ? 1.5 : 2.8) + Math.random() * 4.5,
+          dz * 3.5 + Math.sin(a) * spd,
+          col, isEmber ? 0.96 : 0.86,
+          isFoliage ? 0.18 : 0.15, isFoliage ? 0.08 : 0.04,
+          (isFoliage ? 0.65 : 0.44) + Math.random() * 0.35,
+          isFoliage ? 0.25 : 0.72
+        );
+      }
+    },
+
     step(dt) {
       ribTime += dt;
       let n = 0;

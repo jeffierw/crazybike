@@ -831,7 +831,7 @@ fn skinVertex(pos: vec3f, nrm: vec3f, bw: vec4f, baseRow: i32) -> SkinV {
 
 // ================================================================ 2. Instanced Procedural Solid Renderer (Bikes + World Props)
 const Solid = (() => {
-  const MAX_INST = 6400;
+  const MAX_INST = 9600;
   const shapes = {};
   let gfx = null, pipe = null, shPipe = null, instBuf = null;
   const instCPU = new Float32Array(MAX_INST * 16);
@@ -952,7 +952,291 @@ const Solid = (() => {
     return { v: new Float32Array(V), i: new Uint32Array(I) };
   }
 
-  const queues = { box: [], cyl: [], cone: [], tire: [], rim: [], sphere: [] };
+  function buildNormals(P, I) {
+    const nv = P.length / 3;
+    const N = new Float32Array(nv * 3);
+    for (let i = 0; i < I.length; i += 3) {
+      const a = I[i] * 3, b = I[i + 1] * 3, c = I[i + 2] * 3;
+      const abx = P[b] - P[a], aby = P[b + 1] - P[a + 1], abz = P[b + 2] - P[a + 2];
+      const acx = P[c] - P[a], acy = P[c + 1] - P[a + 1], acz = P[c + 2] - P[a + 2];
+      const nx = aby * acz - abz * acy;
+      const ny = abz * acx - abx * acz;
+      const nz = abx * acy - aby * acx;
+      N[a] += nx; N[a + 1] += ny; N[a + 2] += nz;
+      N[b] += nx; N[b + 1] += ny; N[b + 2] += nz;
+      N[c] += nx; N[c + 1] += ny; N[c + 2] += nz;
+    }
+    const V = new Float32Array(nv * 6);
+    for (let i = 0; i < nv; i++) {
+      const p3 = i * 3, o6 = i * 6;
+      const nx = N[p3], ny = N[p3 + 1], nz = N[p3 + 2];
+      const L = Math.hypot(nx, ny, nz);
+      V[o6] = P[p3]; V[o6 + 1] = P[p3 + 1]; V[o6 + 2] = P[p3 + 2];
+      if (L > 1e-6) { V[o6 + 3] = nx / L; V[o6 + 4] = ny / L; V[o6 + 5] = nz / L; }
+      else { V[o6 + 3] = 0; V[o6 + 4] = 1; V[o6 + 5] = 0; }
+    }
+    return { v: V, i: new Uint32Array(I) };
+  }
+
+  function makeLathe(rings, segs, posFn, topCap = true, botCap = true) {
+    const P = [], I = [];
+    const stride = segs + 1;
+    for (let r = 0; r <= rings; r++) {
+      const t = r / rings;
+      for (let k = 0; k <= segs; k++) {
+        const a = (k / segs) * TAU;
+        const p = posFn(t, a, k % segs, r);
+        P.push(p[0], p[1], p[2]);
+      }
+    }
+    for (let r = 0; r < rings; r++) {
+      for (let k = 0; k < segs; k++) {
+        const j0 = r * stride + k, j1 = j0 + stride;
+        I.push(j0, j1, j0 + 1, j1, j1 + 1, j0 + 1);
+      }
+    }
+    if (botCap) {
+      const c = P.length / 3;
+      const p0 = posFn(0, 0, 0, 0);
+      P.push(0, p0[1], 0);
+      for (let k = 0; k < segs; k++) I.push(c, k + 1, k);
+    }
+    if (topCap) {
+      const topBase = rings * stride;
+      const c = P.length / 3;
+      const pt = posFn(1, 0, 0, rings);
+      P.push(0, pt[1], 0);
+      for (let k = 0; k < segs; k++) I.push(c, topBase + k, topBase + k + 1);
+    }
+    return buildNormals(P, I);
+  }
+
+  // Organic drooping alpine conifer bough whorl (14 irregular jagged needle sprays arranged radially)
+  function makeBoughWhorl() {
+    const P = [], I = [];
+    const N_FRONDS = 14;
+    for (let f = 0; f < N_FRONDS; f++) {
+      const h0 = fract(Math.sin(f * 78.233 + 13.7) * 43758.54);
+      const h1 = fract(Math.sin(f * 19.913 + 91.3) * 19341.17);
+      const baseA = (f / N_FRONDS) * TAU + (h0 - 0.5) * 0.24;
+      const len = 0.72 + h1 * 0.36;
+      const droop = -0.18 - h0 * 0.14;
+      const tilt = (f & 1 ? 1 : -1) * (0.04 + h1 * 0.05);
+      const ca = Math.cos(baseA), sa = Math.sin(baseA);
+      const rx = -sa, rz = ca;
+      const rings = 4;
+      const baseV = P.length / 3;
+      for (let r = 0; r <= rings; r++) {
+        const u = r / rings;
+        const rr = u * len;
+        const yMid = u * 0.04 + droop * u * u + tilt * Math.sin(u * PI);
+        const w = (u < 0.15 ? u / 0.15 : Math.pow(1 - (u - 0.15) / 0.85, 0.75)) * (0.16 + 0.07 * Math.sin(u * 9.0 + f));
+        const th = Math.max(0.015, 0.045 * (1 - u * 0.7));
+        const cx = ca * rr, cz = sa * rr;
+        // 4-point cross section per ring: top, right, bottom, left (CCW prism)
+        P.push(
+          cx, yMid + th, cz,
+          cx + rx * w, yMid - 0.015 * u, cz + rz * w,
+          cx, yMid - th, cz,
+          cx - rx * w, yMid - 0.015 * u, cz - rz * w
+        );
+      }
+      for (let r = 0; r < rings; r++) {
+        const b0 = baseV + r * 4, b1 = b0 + 4;
+        for (let c = 0; c < 4; c++) {
+          const cn = (c + 1) & 3;
+          I.push(b0 + c, b1 + c, b0 + cn, b0 + cn, b1 + c, b1 + cn);
+        }
+      }
+      // Cap root & tip cleanly
+      I.push(baseV, baseV + 1, baseV + 2, baseV, baseV + 2, baseV + 3);
+      const tv = baseV + rings * 4;
+      I.push(tv, tv + 3, tv + 2, tv, tv + 2, tv + 1);
+    }
+    return buildNormals(P, I);
+  }
+
+  // Sculpted angular granite / sandstone rock boulder (faceted 3D displaced sphere!)
+  function makeRock() {
+    const lat = 8, lon = 12;
+    const P = [], I = [];
+    const warp = (nx, ny, nz) => {
+      const f1 = Math.sin(nx * 3.1 + ny * 2.4 + nz * 1.9) * 0.18;
+      const f2 = Math.cos(nx * 5.7 - nz * 4.9 + ny * 3.2) * 0.11;
+      const shelf = -Math.abs(Math.sin(ny * 3.6 + nx * 1.4)) * 0.12;
+      const flat = ny > 0.55 ? (ny - 0.55) * 0.25 : 0;
+      const r = 0.52 * (1 + f1 + f2 + shelf - flat);
+      return [nx * r, (ny > 0 ? ny * 0.85 : ny * 0.65) * r, nz * r];
+    };
+    for (let y = 0; y <= lat; y++) {
+      const phi = (y / lat) * PI, sp = Math.sin(phi), cp = Math.cos(phi);
+      for (let x = 0; x <= lon; x++) {
+        const th = (x / lon) * TAU;
+        const p = warp(sp * Math.cos(th), cp, sp * Math.sin(th));
+        P.push(p[0], p[1], p[2]);
+      }
+    }
+    const st = lon + 1;
+    for (let y = 0; y < lat; y++) {
+      for (let x = 0; x < lon; x++) {
+        const a = y * st + x, b = a + st;
+        I.push(a, a + 1, b, a + 1, b + 1, b);
+      }
+    }
+    return buildNormals(P, I);
+  }
+
+  // Eroded Moab stratified sandstone hoodoo spire (0..1 in Y)
+  function makeHoodoo() {
+    return makeLathe(14, 14, (t, a) => {
+      const base = 0.52 * Math.exp(-t * 4.5);
+      const waist = 0.22 + 0.10 * Math.cos(t * 14.0);
+      const cap = 0.42 * smooth(0.68, 0.86, t) * (1 - 0.28 * smooth(0.90, 1.0, t));
+      const rib = 1 + 0.14 * Math.sin(a * 3 + t * 5.0) + 0.09 * Math.cos(a * 5 - t * 2.5);
+      const rad = (base + waist + cap) * rib;
+      return [Math.cos(a) * rad, t - 0.02, Math.sin(a) * rad];
+    });
+  }
+
+  // Fractured angular hexagonal volcanic basalt spire (-0.5..+0.5 in Y)
+  function makeBasalt() {
+    return makeLathe(6, 6, (t, a, k) => {
+      const taper = lerp(0.55, 0.22, Math.pow(t, 0.85));
+      const slant = t > 0.7 ? (k & 1 ? 0.10 : -0.06) : 0;
+      const notch = 1 + 0.15 * Math.sin(t * 9.0 + k * 2.1);
+      return [Math.cos(a) * taper * notch, t - 0.5 + slant, Math.sin(a) * taper * notch];
+    });
+  }
+
+  // Multi-lobe organic scrub / alpine bush cluster
+  function makeShrub() {
+    const P = [], I = [];
+    const lobes = [
+      [0, 0.24, 0, 0.40, 0.32, 0.40],
+      [-0.24, 0.18, 0.14, 0.30, 0.24, 0.28],
+      [0.24, 0.20, -0.10, 0.28, 0.26, 0.30],
+      [0.05, 0.30, 0.22, 0.26, 0.22, 0.26],
+      [-0.10, 0.28, -0.22, 0.25, 0.24, 0.25],
+    ];
+    const lat = 4, lon = 7, st = lon + 1;
+    for (let l = 0; l < lobes.length; l++) {
+      const [ox, oy, oz, sx, sy, sz] = lobes[l];
+      const base = P.length / 3;
+      for (let y = 0; y <= lat; y++) {
+        const phi = (y / lat) * PI, sp = Math.sin(phi), cp = Math.cos(phi);
+        for (let x = 0; x <= lon; x++) {
+          const th = (x / lon) * TAU;
+          const r = 1 + 0.22 * Math.sin(th * 3 + y * 2.1 + l);
+          P.push(ox + sp * Math.cos(th) * sx * r, oy + cp * sy * r, oz + sp * Math.sin(th) * sz * r);
+        }
+      }
+      for (let y = 0; y < lat; y++) {
+        for (let x = 0; x < lon; x++) {
+          const a = base + y * st + x, b = a + st;
+          I.push(a, a + 1, b, a + 1, b + 1, b);
+        }
+      }
+    }
+    return buildNormals(P, I);
+  }
+
+  // 12-ribbed fluted saguaro cactus trunk (-0.5..+0.5 in Y)
+  function makeCactus() {
+    return makeLathe(10, 16, (t, a) => {
+      const dome = t > 0.82 ? Math.sqrt(Math.max(0.02, 1 - Math.pow((t - 0.82) / 0.18, 2))) : 1.0;
+      const swell = 0.82 + 0.24 * Math.sin(t * PI * 0.85);
+      const ribs = 1 + 0.14 * Math.cos(a * 12.0);
+      const r = 0.50 * dome * swell * ribs;
+      return [Math.cos(a) * r, t - 0.5, Math.sin(a) * r];
+    });
+  }
+
+  // Pitched Mediterranean terracotta gable roof prism (centered X,Z in -0.5..0.5, Y in 0..1)
+  function makeRoof() {
+    const P = [], I = [];
+    const pushQuad = (a, b, c, d) => {
+      const q = P.length / 3;
+      P.push(...a, ...b, ...c, ...d);
+      I.push(q, q + 1, q + 2, q, q + 2, q + 3);
+    };
+    const pushTri = (a, b, c) => {
+      const q = P.length / 3;
+      P.push(...a, ...b, ...c);
+      I.push(q, q + 1, q + 2);
+    };
+    const fl = [-0.55, 0, -0.55], fr = [0.55, 0, -0.55], fTop = [0, 1, -0.45];
+    const bl = [-0.55, 0,  0.55], br = [0.55, 0,  0.55], bTop = [0, 1,  0.45];
+    pushQuad(fl, fTop, bTop, bl); // Left pitch
+    pushQuad(br, bTop, fTop, fr); // Right pitch
+    pushTri(fl, fr, fTop);        // Front gable
+    pushTri(br, bl, bTop);        // Rear gable
+    pushQuad(bl, br, fr, fl);     // Eaves bottom
+    return buildNormals(P, I);
+  }
+
+  // Sculpted organic animal torso along Z (-0.5 noseward .. +0.5 rump)
+  function makeAnimalBody() {
+    const m = makeLathe(10, 12, (t, a) => {
+      // Y along lathe axis maps to +Z later via simple rotation swap (-z = forward)
+      const chest = Math.exp(-Math.pow((t - 0.28) / 0.24, 2)) * 0.34;
+      const waist = Math.exp(-Math.pow((t - 0.56) / 0.18, 2)) * 0.24;
+      const rump  = Math.exp(-Math.pow((t - 0.78) / 0.20, 2)) * 0.31;
+      const r = 0.08 + chest + waist + rump;
+      return [Math.cos(a) * r * 0.72, (t - 0.5), Math.sin(a) * r];
+    });
+    // Rotate lathe (+Y -> +Z) so torso spans -0.5..+0.5 along Z!
+    const v = m.v;
+    for (let i = 0; i < v.length; i += 6) {
+      const y = v[i + 1], z = v[i + 2], ny = v[i + 4], nz = v[i + 5];
+      v[i + 1] = -z; v[i + 2] = y;
+      v[i + 4] = -nz; v[i + 5] = ny;
+    }
+    return m;
+  }
+
+  // Cambered swept bird wing along +X (right=true) or mirrored -X (right=false with flipped winding!)
+  function makeWing(right = true) {
+    const P = [], I = [];
+    const span = 6;
+    for (let s = 0; s <= span; s++) {
+      const u = s / span;
+      const x = u * (right ? 1 : -1);
+      const chord = lerp(0.42, 0.14, u * u) * (1 + 0.15 * Math.sin(u * PI));
+      const zLead = -0.18 + u * u * 0.26;
+      const zTrail = zLead + chord;
+      const arch = Math.sin(u * PI * 0.85) * 0.08;
+      // 3 chord vertices: leading edge, cambered mid-top/bot ridge, trailing feather edge (4-pt diamond cross section)
+      P.push(
+        x, arch, zLead,
+        x, arch + 0.045 * (1 - u * 0.65), zLead + chord * 0.38,
+        x, arch, zTrail,
+        x, arch - 0.015 * (1 - u * 0.75), zLead + chord * 0.38
+      );
+    }
+    for (let s = 0; s < span; s++) {
+      const b0 = s * 4, b1 = b0 + 4;
+      for (let c = 0; c < 4; c++) {
+        const cn = (c + 1) & 3;
+        if (right) {
+          I.push(b0 + c, b0 + cn, b1 + c, b0 + cn, b1 + cn, b1 + c);
+        } else {
+          I.push(b0 + c, b1 + c, b0 + cn, b0 + cn, b1 + c, b1 + cn);
+        }
+      }
+    }
+    const last = span * 4;
+    if (right) {
+      I.push(0, 1, 2, 0, 2, 3, last, last + 2, last + 1, last, last + 3, last + 2);
+    } else {
+      I.push(0, 2, 1, 0, 3, 2, last, last + 1, last + 2, last, last + 2, last + 3);
+    }
+    return buildNormals(P, I);
+  }
+
+  const queues = {
+    box: [], cyl: [], cone: [], tire: [], rim: [], sphere: [],
+    bough: [], rock: [], hoodoo: [], basalt: [], shrub: [], cactBody: [], roof: [], animalBody: [], wingL: [], wingR: [],
+  };
 
   function pushMat(kind, m, col, rough = 0.5) {
     queues[kind].push(
@@ -991,6 +1275,16 @@ const Solid = (() => {
         tire: makeTorus(24, 9, 0.365, 0.060),
         rim: makeRim(24, 6, 0.312, 0.017),
         sphere: makeOctaSphere(6, 10),
+        bough: makeBoughWhorl(),
+        rock: makeRock(),
+        hoodoo: makeHoodoo(),
+        basalt: makeBasalt(),
+        shrub: makeShrub(),
+        cactBody: makeCactus(),
+        roof: makeRoof(),
+        animalBody: makeAnimalBody(),
+        wingL: makeWing(false),
+        wingR: makeWing(true),
       };
       for (const k in defs) {
         shapes[k] = {
@@ -1031,7 +1325,13 @@ const Solid = (() => {
         fs: `
           fn frag(v: VOut) -> FOut {
             let sh: f32 = sampleShadow(v.wpos, normalize(v.wnrm));
-            var c: vec3f = litSurface(v.col.rgb, v.wnrm, v.wpos, v.col.w, sh);
+            var alb: vec3f = v.col.rgb;
+            if (v.col.w > 0.68) {
+              let n3: f32 = fbm3(v.wpos.xz * 0.62 + vec2f(v.wpos.y * 0.44, -v.wpos.y * 0.31));
+              let strata: f32 = 0.93 + 0.09 * sin(v.wpos.y * 4.4 + n3 * 3.2);
+              alb = alb * (0.82 + 0.36 * n3) * strata;
+            }
+            var c: vec3f = litSurface(alb, v.wnrm, v.wpos, v.col.w, sh);
             if (v.col.w < 0.0) {
               c = v.col.rgb * 2.1;
             }

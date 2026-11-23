@@ -254,9 +254,13 @@ const App = (() => {
       } else if (ev.type === 'knockdown' || ev.type === 'crash') {
         Particles.burstImpact(ev.pos, [1.8, 0.36, 0.12], 18);
         if (ev.rider.isPlayer) { Feel.jolt(0.55, 0.60, 0.04); Sound.playCrash(); }
-      } else if (ev.type === 'scrape' && ev.rider.isPlayer) {
-        Particles.burstImpact(ev.pos, [1.4, 0.85, 0.3], 8);
-        Feel.jolt(0.18, 0.14, 0); Sound.playWhoosh();
+      } else if (ev.type === 'scrape' && ev.obs) {
+        Props.onHit(ev.obs, -(ev.dir ? ev.dir[0] : 0), -(ev.dir ? ev.dir[1] : 1), ev.speed || 20);
+        Particles.burstDebris(ev.obs.kind, ev.pos, ev.dir || [0, -1]);
+        if (ev.rider.isPlayer) {
+          Feel.jolt(0.22, 0.16, 0);
+          Sound.playPropHit(ev.obs.kind, ev.speed || 20);
+        }
       } else if (ev.type === 'nearmiss' && ev.rider.isPlayer) {
         if (Feel.nearMiss(ev.side)) { player.adrenaline = Math.min(100, player.adrenaline + 6); Sound.playWhoosh(); }
       } else if (ev.type === 'finish' && ev.rider.isPlayer) {

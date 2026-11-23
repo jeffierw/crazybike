@@ -30,63 +30,122 @@ const Props = (() => {
     Solid.pushLimb([xL - 0.5, topY + 0.18, z], [xR + 0.5, topY + 0.18, z], 0.18, isStart ? [0.24, 0.88, 0.42] : [0.98, 0.86, 0.34], -1.0, 'box');
   }
 
+  const activeHits = new Map();
+  let lastEmitTime = 0;
+
+  function onHit(obs, dirX = 0, dirZ = -1, speed = 20) {
+    if (!obs) return;
+    const len = Math.hypot(dirX, dirZ) || 1;
+    const k = clamp(speed / 28, 0.35, 1.35);
+    activeHits.set(obs.id, {
+      t0: lastEmitTime,
+      dx: dirX / len,
+      dz: dirZ / len,
+      amp: (obs.kind === 'pine' || obs.kind === 'cactus' || obs.kind === 'lamp') ? 0.24 * k : 0.08 * k,
+    });
+  }
+
   function emitObstacle(o, time) {
     const sc = o.scale || 1;
     const by = o.y - 0.70;
-    if (o.kind === 'pine') {
-      // Rich 4-tier alpine conifer tree with varied needle depth & bark taper
-      const trunkH = o.h * 0.32;
-      Solid.pushTRS('cyl', [o.x, by + trunkH * 0.5, o.z], 0, 0, 0, [0.56 * sc, trunkH + 1.1, 0.56 * sc], [0.28, 0.17, 0.10], 0.88);
-      const greens = [[0.06, 0.19, 0.09], [0.09, 0.25, 0.11], [0.12, 0.31, 0.14], [0.16, 0.38, 0.16]];
-      for (let t = 0; t < 4; t++) {
-        const cy = by + trunkH + t * (o.h * 0.17);
-        const rad = (3.2 - t * 0.58) * sc;
-        const ch = (3.4 - t * 0.38) * sc;
-        Solid.pushTRS('cone', [o.x, cy + ch * 0.36, o.z], o.id + t * 0.7, 0, 0, [rad, ch, rad], greens[t], 0.84);
+    let swX = 0, swZ = 0, jX = 0, jZ = 0;
+    const hit = activeHits.get(o.id);
+    if (hit) {
+      const age = Math.max(0, time - hit.t0);
+      if (age > 1.45) {
+        activeHits.delete(o.id);
+      } else {
+        const s = hit.amp * Math.exp(-3.2 * age) * Math.sin(age * 22.0 + 0.35);
+        swX = -hit.dz * s;
+        swZ =  hit.dx * s;
+        jX = hit.dx * s * 0.45;
+        jZ = hit.dz * s * 0.45;
       }
+    }
+
+    const ox = o.x + jX, oz = o.z + jZ;
+    let baseM = m4.translate([ox, by, oz]);
+    if (swX || swZ) baseM = m4.mul(m4.mul(baseM, m4.rotX(swX)), m4.rotZ(swZ));
+    const pushM = (kind, lx, ly, lz, ry, rx, rz, sx, sy, sz, col, rough) => {
+      let m = m4.mul(baseM, m4.translate([lx, ly, lz]));
+      if (ry) m = m4.mul(m, m4.rotY(ry));
+      if (rx) m = m4.mul(m, m4.rotX(rx));
+      if (rz) m = m4.mul(m, m4.rotZ(rz));
+      m = m4.mul(m, m4.scale([sx, sy, sz]));
+      Solid.push(kind, m, col, rough);
+    };
+
+    if (o.kind === 'pine') {
+      // Sculpted organic Alpine spruce/pine: gnarled leaning bark trunk + 5-tier jagged drooping bough whorls + spire tip!
+      const lean = (hash1(o.id * 7.3) - 0.5) * 0.09;
+      const swayWind = Math.sin(time * 1.4 + o.id * 0.9) * 0.014;
+      const trunkH = o.h * 0.88;
+      pushM('cyl', 0, trunkH * 0.5, 0, o.id, lean + swayWind, lean * 0.7, 0.42 * sc, trunkH + 1.0, 0.42 * sc, [0.27, 0.17, 0.10], 0.90);
+      const greens = [
+        [0.05, 0.16, 0.08], [0.07, 0.21, 0.09], [0.09, 0.26, 0.11],
+        [0.12, 0.32, 0.13], [0.15, 0.37, 0.15],
+      ];
+      const tiers = 5;
+      for (let t = 0; t < tiers; t++) {
+        const u = t / (tiers - 1);
+        const cy = o.h * (0.28 + u * 0.62);
+        const rad = lerp(3.45, 1.35, Math.pow(u, 0.82)) * sc;
+        const vy = lerp(2.2, 1.2, u) * sc;
+        pushM('bough', 0, cy, 0, o.id * 1.9 + t * 1.37, lean * u + swayWind * (1 + u), 0, rad, vy, rad, greens[t], 0.85);
+      }
+      // Slender needle leader spire
+      pushM('cone', lean * 0.5, o.h * 0.95, 0, o.id, swayWind * 2, 0, 0.95 * sc, 2.0 * sc, 0.95 * sc, greens[4], 0.84);
     } else if (o.kind === 'spire') {
-      // Sculpted Moab stratified sandstone hoodoo spire
-      const c1 = [0.60, 0.24, 0.12], c2 = [0.72, 0.34, 0.16], c3 = [0.46, 0.18, 0.10];
-      Solid.pushTRS('cyl', [o.x, by + o.h * 0.24, o.z], o.id, 0.04, 0, [o.r * 1.95, o.h * 0.52, o.r * 1.72], c1, 0.88);
-      Solid.pushTRS('cyl', [o.x + 0.15 * sc, by + o.h * 0.58, o.z - 0.1 * sc], o.id + 1, 0, 0.05, [o.r * 1.38, o.h * 0.34, o.r * 1.32], c3, 0.90);
-      Solid.pushTRS('box', [o.x + 0.1 * sc, by + o.h * 0.82, o.z], o.id * 0.5, 0, 0, [o.r * 1.90, o.h * 0.20, o.r * 1.58], c2, 0.86);
+      // Eroded Moab stratified sandstone hoodoo spire + talus scree boulders at base!
+      const c1 = [0.64, 0.27, 0.13], c2 = [0.49, 0.19, 0.10];
+      pushM('hoodoo', 0, 0, 0, o.id * 2.1, 0.02, 0, o.r * 2.4, o.h * 1.05, o.r * 2.1, c1, 0.88);
+      pushM('rock', o.r * 0.85, 0.85 * sc, o.r * 0.45, o.id + 1, 0, 0.2, o.r * 1.4, o.r * 0.95, o.r * 1.25, c2, 0.90);
     } else if (o.kind === 'boulder') {
-      const col = Course.mountain.id === 'redrock' ? [0.56, 0.22, 0.12] : [0.34, 0.36, 0.38];
-      Solid.pushTRS('sphere', [o.x, o.y + o.r * 0.24, o.z], o.id * 1.7, 0.2, 0.1, [o.r * 2.25, o.r * 1.38, o.r * 1.92], col, 0.90);
+      // Angular multi-crag rock boulder formation + tuft of desert/alpine scrub
+      const bi = Course.mountain.idx;
+      const col = bi === 0 ? [0.58, 0.24, 0.12] : bi === 1 ? [0.36, 0.38, 0.40] : [0.40, 0.36, 0.34];
+      pushM('rock', 0, o.r * 0.55 + 0.5, 0, o.id * 1.7, 0.25, 0.12, o.r * 2.55, o.r * 1.55, o.r * 2.15, col, 0.90);
+      pushM('rock', -o.r * 0.65, o.r * 0.28 + 0.5, o.r * 0.35, o.id + 3.1, 0.4, -0.2, o.r * 1.4, o.r * 0.95, o.r * 1.3, [col[0] * 0.82, col[1] * 0.82, col[2] * 0.82], 0.92);
     } else if (o.kind === 'cactus') {
-      const col = [0.16, 0.38, 0.14];
-      Solid.pushTRS('cyl', [o.x, by + 1.8 * sc, o.z], 0, 0, 0, [0.44 * sc, 4.0 * sc, 0.44 * sc], col, 0.82);
-      Solid.pushLimb([o.x, by + 1.9 * sc, o.z], [o.x + 0.82 * sc, by + 2.2 * sc, o.z], 0.25 * sc, col, 0.82);
-      Solid.pushLimb([o.x + 0.82 * sc, by + 2.2 * sc, o.z], [o.x + 0.82 * sc, by + 3.1 * sc, o.z], 0.23 * sc, col, 0.82);
-      Solid.pushLimb([o.x, by + 1.4 * sc, o.z], [o.x - 0.72 * sc, by + 1.7 * sc, o.z], 0.23 * sc, col, 0.82);
-      Solid.pushLimb([o.x - 0.72 * sc, by + 1.7 * sc, o.z], [o.x - 0.72 * sc, by + 2.5 * sc, o.z], 0.21 * sc, col, 0.82);
+      // Fluted ribbed Saguaro cactus + organic curved arms + desert sage tuft!
+      const col = [0.16, 0.37, 0.14];
+      const h = 4.3 * sc;
+      pushM('cactBody', 0, h * 0.5 + 0.5, 0, o.id, 0, 0, 0.58 * sc, h, 0.58 * sc, col, 0.82);
+      pushM('cactBody', 0.62 * sc, h * 0.58 + 0.5, 0, 0, 0, -0.68, 0.40 * sc, 1.8 * sc, 0.40 * sc, col, 0.82);
+      pushM('cactBody', -0.56 * sc, h * 0.44 + 0.5, 0.08 * sc, 0, 0, 0.72, 0.38 * sc, 1.5 * sc, 0.38 * sc, col, 0.82);
+      pushM('shrub', 0.35 * sc, 0.65, -0.25 * sc, o.id + 2, 0, 0, 1.0 * sc, 0.85 * sc, 1.0 * sc, [0.32, 0.36, 0.20], 0.90);
     } else if (o.kind === 'basalt') {
-      Solid.pushTRS('cone', [o.x, by + o.h * 0.62, o.z], o.id * 0.9, 0.04, 0.04, [o.r * 2.1, o.h * 1.55, o.r * 1.9], [0.13, 0.11, 0.12], 0.80);
+      // Cluster of fractured hexagonal obsidian/basalt spires
+      const col = [0.13, 0.11, 0.12];
+      pushM('basalt', 0, o.h * 0.55 + 0.5, 0, o.id * 0.9, 0.05, 0.04, o.r * 2.2, o.h * 1.55, o.r * 2.0, col, 0.82);
+      pushM('basalt', o.r * 0.72, o.h * 0.32 + 0.5, -o.r * 0.32, o.id * 1.4, -0.08, 0.12, o.r * 1.3, o.h * 0.95, o.r * 1.2, [0.16, 0.13, 0.13], 0.84);
     } else if (o.kind === 'ember') {
-      Solid.pushTRS('cone', [o.x, by + o.h * 0.45, o.z], o.id, 0, 0, [o.r * 2.3, o.h * 1.25, o.r * 2.3], [0.15, 0.10, 0.10], 0.82);
-      const pulse = 0.82 + 0.28 * Math.sin(time * 4.5 + o.id);
-      Solid.pushTRS('sphere', [o.x, by + o.h * 0.94, o.z], 0, 0, 0, [0.72 * pulse, 0.60 * pulse, 0.72 * pulse], [1.7, 0.40, 0.06], -1.0);
+      // Jagged basalt vent cone + pulsing magma fissure crater
+      pushM('basalt', 0, o.h * 0.44 + 0.5, 0, o.id, 0, 0, o.r * 2.4, o.h * 1.25, o.r * 2.4, [0.15, 0.10, 0.10], 0.84);
+      const pulse = 0.84 + 0.24 * Math.sin(time * 4.5 + o.id);
+      pushM('rock', 0, o.h * 0.95 + 0.5, 0, o.id, 0, 0, 0.88 * pulse, 0.58 * pulse, 0.88 * pulse, [1.8, 0.42, 0.06], -1.0);
     } else if (o.kind === 'house') {
+      // Weathered Mediterranean coastal hillside villa: pitched terracotta roof, wooden balcony & cypress shrub (no plain boxes!)
       const pal = TOWN_PALETTE[o.colorIdx % TOWN_PALETTE.length];
       const yaw = (o.id % 4) * 0.08 - 0.12;
-      const w = 4.6 * sc, h = 6.4 * sc, d = 5.0 * sc;
-      Solid.pushTRS('box', [o.x, by + h * 0.42, o.z], yaw, 0, 0, [w, h + 1.6, d], pal, 0.76);
-      Solid.pushTRS('box', [o.x, by + h * 0.96, o.z], yaw, 0, 0, [w * 1.12, 0.65, d * 1.12], [0.54, 0.21, 0.14], 0.84);
+      const w = 4.6 * sc, h = 6.2 * sc, d = 5.0 * sc;
+      pushM('box', 0, h * 0.46, 0, yaw, 0, 0, w, h + 1.4, d, pal, 0.78);
+      pushM('roof', 0, h * 0.95 + 0.35, 0, yaw, 0, 0, w * 1.10, 2.2 * sc, d * 1.08, [0.58, 0.22, 0.14], 0.84);
       const faceSide = o.u > 0 ? -1 : 1;
-      const wx = o.x + faceSide * (w * 0.51);
-      Solid.pushTRS('box', [wx, by + h * 0.56, o.z], yaw, 0, 0, [0.55, 0.22, d * 0.74], [0.34, 0.22, 0.12], 0.82);
-      Solid.pushTRS('box', [wx, by + h * 0.74, o.z - d * 0.20], yaw, 0, 0, [0.14, 1.15, 0.95], [0.14, 0.18, 0.24], 0.30);
-      Solid.pushTRS('box', [wx, by + h * 0.74, o.z + d * 0.20], yaw, 0, 0, [0.14, 1.15, 0.95], [0.14, 0.18, 0.24], 0.30);
+      pushM('box', faceSide * (w * 0.51), h * 0.54, 0, yaw, 0, 0, 0.65, 0.24, d * 0.74, [0.34, 0.22, 0.12], 0.82);
+      pushM('box', faceSide * (w * 0.51), h * 0.72, -d * 0.20, yaw, 0, 0, 0.14, 1.15, 0.95, [0.13, 0.17, 0.23], 0.30);
+      pushM('box', faceSide * (w * 0.51), h * 0.72,  d * 0.20, yaw, 0, 0, 0.14, 1.15, 0.95, [0.13, 0.17, 0.23], 0.30);
+      pushM('shrub', faceSide * (w * 0.62), 0.75, d * 0.38, o.id, 0, 0, 1.2 * sc, 1.5 * sc, 1.2 * sc, [0.16, 0.38, 0.18], 0.85);
     } else if (o.kind === 'lamp') {
-      Solid.pushLimb([o.x, by, o.z], [o.x, by + 5.4, o.z], 0.14, [0.22, 0.24, 0.28], 0.45);
-      Solid.pushTRS('sphere', [o.x, by + 5.5, o.z], 0, 0, 0, [0.42, 0.42, 0.42], [1.20, 0.92, 0.52], -1.0);
+      pushM('cyl', 0, 2.7, 0, 0, 0, 0, 0.26, 5.4, 0.26, [0.20, 0.22, 0.26], 0.42);
+      pushM('sphere', 0, 5.45, 0, 0, 0, 0, 0.72, 0.72, 0.72, [1.30, 0.96, 0.54], -1.0);
     } else if (o.kind === 'barrier') {
-      Solid.pushTRS('box', [o.x, o.y + 0.45, o.z], 0, 0, 0, [2.1 * sc, 1.15, 0.75], [0.88, 0.22, 0.16], 0.58);
-      Solid.pushTRS('box', [o.x, o.y + 0.82, o.z], 0, 0, 0, [2.15 * sc, 0.22, 0.78], [0.94, 0.94, 0.92], 0.58);
+      pushM('box', 0, 1.12, 0, 0, 0, 0, 2.1 * sc, 1.10, 0.70, [0.88, 0.22, 0.16], 0.60);
+      pushM('box', 0, 1.48, 0, 0, 0, 0, 2.15 * sc, 0.22, 0.74, [0.94, 0.94, 0.92], 0.60);
     }
   }
 
-  // Organic open-mountainside biome scatter (infinite-X in Endless!) — zero narrow fence boxes!
+  // Organic open-mountainside biome scatter (sculpted bushes, rocky outcrops, fallen pine logs & cypress)
   function emitBiomeDetails(s0, s1, time, quality, centerX = null) {
     const bi = Course.mountain.idx;
     const isEndless = Course.mode.endless && centerX !== null && centerX !== undefined;
@@ -100,7 +159,6 @@ const Props = (() => {
       const sp = Course.at(s);
       const z = -s;
 
-      // Festive overhead street banners in Hillside Town (around guide line)
       if (bi === 3 && (i % 5 === 2) && (isEndless || (sp.cliffL < 0.25 && sp.cliffR < 0.25))) {
         const xL = sp.cx - sp.hw - 2.4, xR = sp.cx + sp.hw + 2.4;
         const yTop = Math.max(Course.height(xL, z), Course.height(xR, z)) + 6.8;
@@ -111,7 +169,6 @@ const Props = (() => {
         }
       }
 
-      // Natural mountainside vegetation & rocky outcrops across wide open slope (or centered on player X in Endless!)
       const hA = hash1(i * 19.3 + bi * 7.1);
       const hB = hash1(i * 37.7 + bi * 13.7);
       let x;
@@ -132,28 +189,28 @@ const Props = (() => {
 
       if (bi === 0) {
         if (hA > 0.35) {
-          Solid.pushTRS('sphere', [x, y + 0.45 * sc, z], i, 0, 0, [1.55 * sc, 0.92 * sc, 1.35 * sc], [0.28, 0.34, 0.18], 0.90);
-          Solid.pushTRS('sphere', [x + 0.6 * sc, y + 0.32 * sc, z - 0.3 * sc], i + 1, 0, 0, [1.1 * sc, 0.70 * sc, 1.0 * sc], [0.34, 0.38, 0.20], 0.90);
+          Solid.pushTRS('shrub', [x, y, z], hB * 6, 0, 0, [1.85 * sc, 1.55 * sc, 1.75 * sc], [0.28, 0.34, 0.18], 0.90);
         } else {
-          Solid.pushTRS('box', [x, y + 0.7 * sc, z], hB * 3, 0.08, 0.06, [3.2 * sc, 1.5 * sc, 2.4 * sc], [0.58, 0.24, 0.13], 0.88);
+          Solid.pushTRS('rock', [x, y + 0.4 * sc, z], hB * 6, 0.12, 0.08, [3.2 * sc, 1.65 * sc, 2.5 * sc], [0.58, 0.24, 0.13], 0.90);
         }
       } else if (bi === 1) {
-        if (hA > 0.45) {
-          Solid.pushTRS('sphere', [x, y + 0.38 * sc, z], i, 0, 0, [1.85 * sc, 0.82 * sc, 1.65 * sc], [0.14, 0.34, 0.12], 0.86);
+        if (hA > 0.42) {
+          Solid.pushTRS('shrub', [x, y, z], hB * 6, 0, 0, [2.1 * sc, 1.6 * sc, 1.9 * sc], [0.13, 0.32, 0.12], 0.86);
         } else {
-          Solid.pushTRS('cyl', [x, y + 0.32 * sc, z], hB * 3, PI * 0.5, 0.12, [0.55 * sc, 3.8 * sc, 0.55 * sc], [0.28, 0.18, 0.11], 0.90);
+          Solid.pushTRS('cyl', [x, y + 0.28 * sc, z], hB * 3, PI * 0.5, 0.12, [0.48 * sc, 3.8 * sc, 0.48 * sc], [0.26, 0.17, 0.10], 0.90);
         }
       } else if (bi === 2) {
-        Solid.pushTRS('cone', [x, y + 1.1 * sc, z], i, 0.1, 0.08, [1.8 * sc, 2.8 * sc, 1.6 * sc], [0.12, 0.10, 0.11], 0.82);
+        Solid.pushTRS('basalt', [x, y + 0.9 * sc, z], i, 0.10, 0.08, [1.8 * sc, 2.7 * sc, 1.6 * sc], [0.12, 0.10, 0.11], 0.84);
         if (hB > 0.65) {
           const g = 0.85 + 0.2 * Math.sin(time * 3.8 + i);
-          Solid.pushTRS('sphere', [x + 0.6, y + 0.25, z], 0, 0, 0, [0.75 * g, 0.35 * g, 0.75 * g], [1.6, 0.38, 0.06], -1.0);
+          Solid.pushTRS('rock', [x + 0.6, y + 0.2, z], 0, 0, 0, [0.75 * g, 0.35 * g, 0.75 * g], [1.6, 0.38, 0.06], -1.0);
         }
       } else {
-        if (hA > 0.4) {
-          Solid.pushTRS('cone', [x, y + 2.4 * sc, z], i, 0, 0, [1.15 * sc, 5.2 * sc, 1.15 * sc], [0.12, 0.28, 0.14], 0.84);
+        if (hA > 0.42) {
+          Solid.pushTRS('bough', [x, y + 1.8 * sc, z], i, 0, 0, [1.15 * sc, 2.4 * sc, 1.15 * sc], [0.12, 0.29, 0.14], 0.85);
+          Solid.pushTRS('cyl', [x, y + 1.1 * sc, z], 0, 0, 0, [0.22 * sc, 2.2 * sc, 0.22 * sc], [0.28, 0.18, 0.11], 0.88);
         } else {
-          Solid.pushTRS('box', [x, y + 0.65 * sc, z], hB * 0.5, 0, 0, [3.4 * sc, 1.4 * sc, 0.75 * sc], [0.74, 0.70, 0.62], 0.86);
+          Solid.pushTRS('rock', [x, y + 0.35 * sc, z], hB * 4, 0, 0, [3.0 * sc, 1.3 * sc, 2.1 * sc], [0.68, 0.62, 0.54], 0.88);
         }
       }
     }
@@ -246,6 +303,7 @@ const Props = (() => {
   }
 
   function emit(centerS, time, quality = 'auto', centerX = null, camEye = null) {
+    lastEmitTime = time;
     const farDist = typeof Quality !== 'undefined' ? Quality.cfg(quality).farDist
       : ((quality === 'low' || quality === 'smooth') ? 185 : quality === 'high' ? 290 : 235);
     const s0 = Math.max(0, centerS - 28);
@@ -315,5 +373,5 @@ const Props = (() => {
     }
   }
 
-  return { emit };
+  return { emit, onHit, activeHitCount: () => activeHits.size };
 })();
