@@ -76,12 +76,15 @@ const Physics = (() => {
 
       // Combat & Crash state (used in Steps 5 & 6)
       combatTier: Math.min(3, (cfg.upgrades && cfg.upgrades.combat) ? Math.floor(cfg.upgrades.combat / 2) : 0),
-      bottles: 1,
+      bottles: 0,
       bottleCd: 0,
       attackTimer: 0,
+      attackDur: 0.36,
       attackCd: 0,
       attackSide: 1,
       attackKind: 'punch',
+      hitRecoil: 0,
+      hitRecoilDir: 0,
       wobble: 0,
       wobbleDir: 0,
       staggerCd: 0,
@@ -132,7 +135,35 @@ const Physics = (() => {
     emit({ type: 'dodge', rider: R, reason, attacker: attacker || R.lastHitBy, pos: R.pos.slice() });
   }
 
-  // V5 Configurable Combat Knockdown (only triggers on combat KO when knockdownEnabled === true; never on obstacles/tricks!)
+  // Clear any active stunt, steering lean, or attack state so respawned riders ALWAYS land straight and level
+  function resetRiderPoseState(R) {
+    R.air = false;
+    R.airTime = 0;
+    R.trickType = null;
+    R.trickHeld = false;
+    R.trickActive = false;
+    R.trickLocked = false;
+    R.trickDone = false;
+    R._trickTimer = 0;
+    R.trickPlannedMax = 0;
+    R.trickPhase = 0;
+    R.trickScore = 0;
+    R.trickCombo = 0;
+    R.trickYaw = 0;
+    R.trickPitch = 0;
+    R.trickRoll = 0;
+    R.steer = 0;
+    R.roll = 0;
+    R.skid = 0;
+    R.wobble = 0;
+    R.wobbleDir = 0;
+    R.attackTimer = 0;
+    R.charge = 0;
+    R.wasJumpHeld = false;
+    R.boosting = false;
+  }
+
+  // V5 Configurable Combat Knockdown (only triggers on Flying Kick / Bottle Headshot when knockdownEnabled === true; never on obstacles/bumps/tricks!)
   function knockdownRider(R, reason, impulseX = 0, impulseZ = 0, attacker = null) {
     if (R.finished) return;
     if (!knockdownEnabled) {
@@ -141,27 +172,23 @@ const Physics = (() => {
     }
     if (R.crashed) return;
     const side = sign(impulseX) || (Math.random() < 0.5 ? -1 : 1);
+    const rotSave = [R.pitch, R.yaw, R.roll];
+    resetRiderPoseState(R);
     R.crashed = true;
     R.crashTimer = 1.25;
     R.crashes++;
-    R.air = false;
-    R.airTime = 0;
-    R.trickType = null;
-    R.trickActive = false;
-    R.trickHeld = false;
-    R.boosting = false;
     R.staggerCd = 1.5;
     if (attacker) R.lastHitBy = attacker;
 
     const vxBase = R.vel[0] * 0.65, vzBase = R.vel[2] * 0.65;
     R.ragPos = [R.pos[0], R.pos[1] + 0.42, R.pos[2]];
     R.ragVel = [vxBase + clamp(impulseX || side * 6.5, -12, 12), Math.max(5.5, 4.5 + Math.abs(impulseX) * 0.25), vzBase + impulseZ];
-    R.ragRot = [R.pitch, R.yaw, R.roll];
+    R.ragRot = rotSave.slice();
     R.ragAngVel = [6.2, (Math.random() - 0.5) * 6.0, side * 7.4];
 
     R.bikeCrashPos = [R.pos[0], R.pos[1] + 0.36, R.pos[2]];
     R.bikeCrashVel = [R.vel[0] * 0.72 - side * 3.5, 4.2, R.vel[2] * 0.74 + impulseZ * 0.5];
-    R.bikeCrashRot = [R.pitch, R.yaw, R.roll];
+    R.bikeCrashRot = rotSave.slice();
     R.bikeCrashAngVel = [-4.8, side * 3.8, -side * 7.8];
 
     emit({ type: 'knockdown', rider: R, reason, attacker: attacker || R.lastHitBy, pos: R.pos.slice() });
@@ -170,6 +197,7 @@ const Physics = (() => {
   function respawnRider(R) {
     R.crashed = false;
     R.crashTimer = 0;
+    resetRiderPoseState(R);
     const s = Math.max(10, R.s - 3);
     const sp = Course.at(s);
     const safeU = Course.mode.endless ? R.u : clamp(R.u * 0.5, -sp.hw * 0.65, sp.hw * 0.65);
@@ -177,18 +205,15 @@ const Physics = (() => {
     R.pos[2] = -s;
     R.pos[1] = Course.height(R.pos[0], R.pos[2]) + 0.12;
     R.yaw = Math.atan2(-sp.dcx, 1);
-    R.pitch = -Math.atan(sp.slope);
-    R.roll = 0;
+    R.pitch = clamp(-Math.atan(sp.slope), -0.65, 0.35);
     const spd = 14;
     R.vel[0] = -Math.sin(R.yaw) * spd;
     R.vel[1] = 0;
     R.vel[2] = -Math.cos(R.yaw) * spd;
     R.speed = spd;
-    R.air = false;
-    R.airTime = 0;
     R.susp = 0.08;
     R.suspV = 0;
-    R.wobble = 0;
+    R.landGrace = 0.42;
     R.staggerCd = 1.4;
     emit({ type: 'respawn', rider: R });
   }
@@ -245,6 +270,7 @@ const Physics = (() => {
     if (R.attackCd > 0) R.attackCd = Math.max(0, R.attackCd - dt);
     if (R.bottleCd > 0) R.bottleCd = Math.max(0, R.bottleCd - dt);
     if (R.staggerCd > 0) R.staggerCd = Math.max(0, R.staggerCd - dt);
+    if (R.hitRecoil > 0) R.hitRecoil = Math.max(0, R.hitRecoil - dt * 2.4);
     if (R.nemesisTimer > 0) {
       R.nemesisTimer -= dt;
       if (R.nemesisTimer <= 0) R.nemesis = false;
@@ -508,7 +534,9 @@ const Physics = (() => {
         R.yaw = clamp(R.yaw - dodgeSide * 0.16, -1.05, 1.05);
         R.roll = clamp(R.roll + dodgeSide * 0.36, -0.82, 0.82);
         R.wobble = Math.max(R.wobble, 0.24);
-        emit({ type: 'scrape', rider: R, obs: o, pos: [o.x, o.y + 1, o.z] });
+        R.hitRecoil = 0.30;
+        R.hitRecoilDir = dodgeSide;
+        emit({ type: 'scrape', rider: R, obs: o, dir: [dnx, dnz], speed: hSpeed, pos: [o.x, o.y + 1, o.z] });
         break;
       } else if (R.isPlayer && !R.air && hSpeed > 15 && distSq < (minD + 1.35) * (minD + 1.35) && Math.abs(dz) < 1.2) {
         // Near-miss rush!

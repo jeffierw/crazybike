@@ -279,8 +279,15 @@ const App = (() => {
             : I18N.bi(`击倒 ${ce.victim.name}! +$${ce.bounty}`, `TAKEDOWN ${ce.victim.name}! +$${ce.bounty}`),
           '#ff5b1f'
         );
-      } else if (ce.type === 'hit' && ce.attacker.isPlayer) {
-        showBanner(I18N.bi(`重击 ${ce.victim.name}!`, `SOLID HIT ${ce.victim.name}!`), '#38e2ff');
+      } else if (ce.type === 'hit' || ce.type === 'punch_hit') {
+        if (ce.attacker.isPlayer) showBanner(I18N.bi(`重拳 ${ce.victim.name}!`, `PUNCH HIT ${ce.victim.name}!`), '#38e2ff');
+      } else if (ce.type === 'pickup' && ce.rider && ce.rider.isPlayer) {
+        showBanner(
+          ce.kind === 'nitro'
+            ? I18N.bi('⚡ 拾取氮气加速 +48%', '⚡ NITRO CANISTER +48%')
+            : I18N.bi(`🍼 拾取水壶 (×${ce.count})`, `🍼 WATER BOTTLE (×${ce.count})`),
+          ce.kind === 'nitro' ? '#ff9f43' : '#38e2ff'
+        );
       }
     }
 
@@ -363,7 +370,7 @@ const App = (() => {
       Combat.emitProjectiles();
     } else if (state === 'race' || state === 'pause') {
       Terrain.update(player.s, player.pos[0]);
-      cam = Camera.update(player, dt, aspect, Feel, state === 'pause');
+      cam = Camera.update(player, dt, aspect, Feel, state === 'pause', state === 'pause' && UI.subMenu === 'views');
       focusPos = [player.pos[0], player.pos[1], player.pos[2] - 14];
       Props.emit(player.s, time, Quality.tier, player.pos[0], cam.eye);
       Wildlife.emit();
@@ -372,7 +379,7 @@ const App = (() => {
       }
       Combat.emitProjectiles();
     } else {
-      // Poised Start-Gate Title Scene: Player & rivals lined up overlooking the canyon drop, soaring wildlife & sunlit motes!
+      // Poised Start-Gate Title Scene: Player & rivals lined up overlooking the canyon drop (switches live when previewing Views!)
       if (!titleRider) buildTitleScene();
       const pnt = Career.paint;
       titleRider.frameCol = pnt.frame;
@@ -381,7 +388,10 @@ const App = (() => {
       titleRider.upgrades = Object.assign({}, Career.data.upgrades);
 
       Terrain.update(12, titleRider.pos[0]);
-      cam = Camera.titleView(titleRider, dt, aspect, time);
+      const previewViews = (state === 'title' && UI.subMenu === 'views');
+      cam = previewViews
+        ? Camera.update(titleRider, dt, aspect, Feel, true, true)
+        : Camera.titleView(titleRider, dt, aspect, time);
       focusPos = [titleRider.pos[0], titleRider.pos[1], titleRider.pos[2] - 14];
       Wildlife.step(12, dt, Quality.tier, titleRider.pos[0]);
       Particles.emitAmbient(focusPos, dt, Quality.tier);
@@ -494,6 +504,7 @@ const App = (() => {
             document.activeElement.blur();
           }
           Camera.resetOrbit();
+          Camera.snapNext();
           Music.setMode('race');
           UI.setScreen('race');
         }

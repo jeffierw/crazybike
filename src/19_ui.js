@@ -155,7 +155,7 @@ const UI = (() => {
         ['S  or  ↓', 'Brake & Drift'],
         ['Space', 'Hold Charge → Release Jump'],
         ['Shift', 'Adrenaline Overdrive'],
-        ['Q / E  or  J / K', 'Left / Right Punch, Kick & Bottle'],
+        ['Q / E  or  J / K', 'Punch, Flying Kick K.O., or Throw Pickup Bottle (25m)'],
         ['Mid-Air WASD / Space', 'Sequential Ink-Brush Stunt Chain (Zero Crash!)'],
         ['Mid-Air S (Tall Cliffs)', '360° Backflip in Chain (Auto-Level Landing)'],
         ['V / Shift+V / 1–8', 'Switch 8 Camera Views'],
@@ -167,7 +167,7 @@ const UI = (() => {
         ['S 或 ↓', '刹车 / 暴走甩尾漂移'],
         ['Space 空格', '按住蓄力 · 松开飞跃'],
         ['Shift', '肾上腺素暴走加速'],
-        ['Q / E 或 J / K', '左右挥拳 / 飞踹 / 砸水壶 / 球棒'],
+        ['Q / E 或 J / K', '左右挥拳推开 / 贴身飞踹击倒 / 投掷拾取的水壶'],
         ['空中 WASD / 空格', '高空连续喷墨特技（做完再接下一个 · 零摔车）'],
         ['高空断崖按 S', '极限 360° 后空翻（落地自动回正）'],
         ['V / Shift+V / 1–8', '切换 8 种镜头机位'],
@@ -198,16 +198,27 @@ const UI = (() => {
         <button id="sub-back" class="e-btn" style="align-self:flex-start;margin-bottom:18px;padding:6px 14px;font-size:12px;">← ${t('返回')}</button>
         ${body}
       </div>
+      ${subMenu === 'views' ? `
+        <div id="view-preview-badge" style="position:absolute;bottom:48px;right:var(--gr);background:rgba(10,13,19,0.72);border:1px solid var(--hair);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-radius:12px;padding:10px 14px;text-align:right;pointer-events:none;max-width:340px;">
+          <div style="font-family:var(--f-lat);font-size:10px;letter-spacing:0.24em;color:var(--sun);">🎥 ${t('当前机位预览')} · ${viewName(curView)}</div>
+          <div id="view-preview-desc" style="font-size:12px;color:var(--snow);margin-top:4px;line-height:1.45;">${I18N.lang === 'en' ? (curView.descEn || '') : (curView.desc || '')}</div>
+        </div>
+      ` : ''}
       <div class="orbit-hint">${t('拖拽右侧画面 360° 环视环境 · 滚轮缩放')}</div>
     `;
     bindCornerTools();
-    document.getElementById('sub-back').onclick = () => { subMenu = 'main'; redraw(); };
+    document.getElementById('sub-back').onclick = () => {
+      const wasViews = subMenu === 'views';
+      subMenu = 'main';
+      if (wasViews) { Camera.resetOrbit(); Camera.snapNext(); }
+      redraw();
+    };
 
     const phBtn = document.getElementById('sub-photo');
     if (phBtn) phBtn.onclick = () => actions.enterPhoto();
 
     root().querySelectorAll('[data-setview]').forEach(b => {
-      b.onclick = () => { Camera.setView(b.dataset.setview); Camera.resetOrbit(); redraw(); };
+      b.onclick = () => { Camera.setView(b.dataset.setview); Camera.resetOrbit(); Camera.snapNext(); redraw(); };
     });
     root().querySelectorAll('[data-lang]').forEach(b => {
       b.onclick = () => { I18N.setLang(b.dataset.lang); };
@@ -548,7 +559,7 @@ const UI = (() => {
 
       <div style="position:absolute;top:var(--gt);right:var(--gr);text-align:right;text-shadow:0 1px 4px rgba(0,0,0,0.92), 0 2px 18px rgba(5,8,13,0.85);">
         <div id="hud-pos" style="font-family:var(--f-lat);font-weight:300;font-size:clamp(34px,4.5vw,48px);line-height:0.95;font-variant-numeric:tabular-nums;">1<span style="font-size:16px;color:var(--dim);">/8</span></div>
-        <div id="hud-ko" style="font-size:12px;letter-spacing:0.12em;color:var(--sun);margin-top:5px;font-weight:500;">K.O. 0 · ${t('推搡')}</div>
+        <div id="hud-ko" style="font-size:12px;letter-spacing:0.12em;color:var(--sun);margin-top:5px;font-weight:500;">K.O. 0 · ${bi('拳脚', 'MELEE')} · 🍼×0</div>
         <div class="hud-bar" style="margin-left:auto;width:142px;"><i id="hud-prog-fill" style="background:var(--cyan);"></i></div>
       </div>
 
@@ -628,7 +639,7 @@ const UI = (() => {
     if (koEl) {
       koEl.textContent = totalRiders <= 1
         ? bi('SOLO · 单人无尽畅滑', 'SOLO · FREERIDE FLOW')
-        : `K.O. ${player.takedowns} · ${t(Combat.TIER_NAMES[player.combatTier])} · 🍼×${player.bottles}`;
+        : `K.O. ${player.takedowns} · ${bi('拳脚', 'MELEE')} · 🍼×${player.bottles}`;
     }
     if (progEl) {
       const p = Course.mode.endless ? ((player.s % 1000) / 10) : clamp((player.s / Course.finishS) * 100, 0, 100);
@@ -800,5 +811,6 @@ const UI = (() => {
     updateHUD,
     redraw,
     get screen() { return screen; },
+    get subMenu() { return subMenu; },
   };
 })();

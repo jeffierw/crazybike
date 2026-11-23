@@ -1373,22 +1373,25 @@ const BikeMesh = (() => {
     // Gentle living breathing & glances when poised at the start gate!
     const breath = idleW ? Math.sin(time * 1.8 + R.id) * 0.015 : 0;
     const glance = idleW ? Math.sin(time * 0.65 + R.id * 2.1) * 0.34 : clamp(-(R.steer || 0) * 0.38, -0.42, 0.42);
+    const recoil = (R.hitRecoil || 0) > 0 ? Math.sin((R.hitRecoil / 0.30) * Math.PI * 2.5) * R.hitRecoil : 0;
+    const recDir = R.hitRecoilDir || 1;
 
     const barDx = Math.cos(steerAng) * 0.42;
     const barDz = Math.sin(steerAng) * 0.42;
-    let handL = [-barDx, 1.14 - comp * 0.88, -0.36 + barDz];
-    let handR = [ barDx, 1.14 - comp * 0.88, -0.36 - barDz];
+    let handL = [-barDx + recoil * recDir * 0.14, 1.14 - comp * 0.88, -0.36 + barDz];
+    let handR = [ barDx + recoil * recDir * 0.14, 1.14 - comp * 0.88, -0.36 - barDz];
     let footL = [-0.18, 0.41 - comp * 0.68 + pedalY * (1 - idleW), 0.10 + pedalZ * (1 - idleW)];
     let footR = [ 0.18, 0.41 - comp * 0.68 - pedalY * (1 - idleW), 0.10 - pedalZ * (1 - idleW)];
-    let pel   = [leanX * 0.65 + pumpX, 1.19 - crouch + pumpY + idleW * 0.04, 0.22 + crouch * 0.14 - sprintAmp * 0.04];
-    let chs   = [leanX * 0.95 + pumpX * 0.65, 1.44 - crouch * 1.12 + pumpCh + breath + idleW * 0.06, 0.04 - (R.boosting ? 0.10 : 0) - sprintAmp * 0.05 + idleW * 0.06];
-    let nck   = [leanX * 1.05 + pumpX * 0.45, 1.66 - crouch * 1.15 + pumpCh * 0.85 + breath + idleW * 0.08, -0.07 - (R.boosting ? 0.12 : 0) - sprintAmp * 0.05 + idleW * 0.07];
-    let hed   = [leanX * 1.08 + pumpX * 0.30, 1.79 - crouch * 1.15 + pumpCh * 0.70 + breath + idleW * 0.08, -0.12 - (R.boosting ? 0.14 : 0) - sprintAmp * 0.05 + idleW * 0.07];
+    let pel   = [leanX * 0.65 + pumpX - recoil * recDir * 0.20, 1.19 - crouch + pumpY + idleW * 0.04, 0.22 + crouch * 0.14 - sprintAmp * 0.04];
+    let chs   = [leanX * 0.95 + pumpX * 0.65 - recoil * recDir * 0.28, 1.44 - crouch * 1.12 + pumpCh + breath + idleW * 0.06, 0.04 - (R.boosting ? 0.10 : 0) - sprintAmp * 0.05 + idleW * 0.06];
+    let nck   = [leanX * 1.05 + pumpX * 0.45 - recoil * recDir * 0.24, 1.66 - crouch * 1.15 + pumpCh * 0.85 + breath + idleW * 0.08, -0.07 - (R.boosting ? 0.12 : 0) - sprintAmp * 0.05 + idleW * 0.07];
+    let hed   = [leanX * 1.08 + pumpX * 0.30 - recoil * recDir * 0.20, 1.79 - crouch * 1.15 + pumpCh * 0.70 + breath + idleW * 0.08, -0.12 - (R.boosting ? 0.14 : 0) - sprintAmp * 0.05 + idleW * 0.07];
     let torsoYaw = clamp(-(R.steer || 0) * 0.22, -0.28, 0.28) + Math.cos(pedA) * 0.085 * sprintAmp;
-    let torsoRoll = leanX * 0.35 - Math.cos(pedA) * 0.075 * sprintAmp;
+    let torsoRoll = leanX * 0.35 - Math.cos(pedA) * 0.075 * sprintAmp - recoil * recDir * 0.48;
     let headPitch = 0.10 + crouch * 0.18 - idleW * 0.10;
     let elbowPoleL = [-0.85, -0.18, 0.55], elbowPoleR = [0.85, -0.18, 0.55];
     let kneePoleL = [-0.25, 0.15, -1.0], kneePoleR = [0.25, 0.15, -1.0];
+    let headYaw = glance;
 
     // Idle poised start-gate pose: left foot planted solidly on the dirt beside the pedal!
     if (idleW > 0.5) {
@@ -1456,25 +1459,67 @@ const BikeMesh = (() => {
       }
     }
 
-    // ---- Combat Punch / Boot Kick / Bat Swing Animation ----
+    // ---- 3-Phase Human Biomechanical Punch, Flying Side-Kick & Overhand Throw Kinematics ----
     if ((R.attackTimer || 0) > 0) {
-      const swing = Math.sin(sat(1 - R.attackTimer / 0.34) * PI);
+      const p = sat(1 - R.attackTimer / (R.attackDur || 0.36));
       const sdSide = R.attackSide || 1;
-      if (R.combatTier >= 1 && R.attackKind === 'kick') {
-        if (sdSide < 0) footL = [-0.86 * swing - 0.18, 0.88, -0.02];
-        else            footR = [ 0.86 * swing + 0.18, 0.88, -0.02];
-        torsoYaw -= sdSide * 0.32 * swing;
+      if (R.attackKind === 'kick') {
+        // Phase 1 (0..0.24): cock knee up -> Phase 2 (0.24..0.64): snap straight flying boot kick -> Phase 3: retract cleanly
+        const cock = smooth(0, 0.24, p) * (1 - smooth(0.24, 0.42, p));
+        const ext = smooth(0.20, 0.38, p) * (1 - smooth(0.60, 1.0, p));
+        pel[0] -= sdSide * (0.08 * cock + 0.18 * ext);
+        chs[0] -= sdSide * (0.12 * cock + 0.26 * ext);
+        nck[0] -= sdSide * (0.10 * cock + 0.22 * ext);
+        hed[0] -= sdSide * (0.08 * cock + 0.18 * ext);
+        torsoRoll -= sdSide * (0.16 * cock + 0.36 * ext);
+        torsoYaw -= sdSide * (0.20 * cock + 0.42 * ext);
+        headYaw = lerp(headYaw, sdSide * 0.48, clamp(cock + ext, 0, 1));
+        if (sdSide < 0) {
+          const tuckF = [-0.36, 0.92, -0.22];
+          const snapF = [-1.08, 0.96, -0.02];
+          footL = v3.lerp(footL, tuckF, cock);
+          footL = v3.lerp(footL, snapF, ext);
+          kneePoleL = [-0.90, 0.65, -0.45];
+        } else {
+          const tuckF = [ 0.36, 0.92, -0.22];
+          const snapF = [ 1.08, 0.96, -0.02];
+          footR = v3.lerp(footR, tuckF, cock);
+          footR = v3.lerp(footR, snapF, ext);
+          kneePoleR = [ 0.90, 0.65, -0.45];
+        }
+      } else if (R.attackKind === 'throw') {
+        const cock = smooth(0, 0.32, p) * (1 - smooth(0.32, 0.52, p));
+        const whip = smooth(0.30, 0.58, p) * (1 - smooth(0.68, 1.0, p));
+        const cockH = [sdSide * 0.42, 1.88, 0.16];
+        const relH  = [sdSide * 0.34, 1.56, -0.62];
+        if (sdSide < 0) {
+          handL = v3.lerp(handL, cockH, cock); handL = v3.lerp(handL, relH, whip);
+        } else {
+          handR = v3.lerp(handR, cockH, cock); handR = v3.lerp(handR, relH, whip);
+        }
+        torsoYaw += sdSide * (-0.36 * cock + 0.48 * whip);
+        torsoRoll += sdSide * 0.16 * (cock + whip);
       } else {
-        const reach = (R.combatTier >= 3 ? 0.52 : 0.46) * swing;
-        if (sdSide < 0) handL = [-0.46 - reach, 1.48, -0.18];
-        else            handR = [ 0.46 + reach, 1.48, -0.18];
-        torsoYaw += sdSide * 0.42 * swing;
-      }
-      // Visible alloy downhill bat / wrench at combat tier 3+!
-      if (R.combatTier >= 3 && R.attackKind !== 'kick') {
-        const gripW = xform(bikeM, sdSide < 0 ? handL : handR);
-        const tipW  = xform(bikeM, [sdSide * (0.95 + 0.55 * swing), 1.48, -0.34]);
-        Solid.pushLimb(gripW, tipW, 0.055, [0.92, 0.72, 0.28], 0.32);
+        // Athletic 3-Phase Hook / Cross Punch: pull shoulder & fist back -> explosive punch lean & rotation -> smooth return!
+        const wind = smooth(0, 0.22, p) * (1 - smooth(0.22, 0.36, p));
+        const hit  = smooth(0.18, 0.36, p) * (1 - smooth(0.58, 1.0, p));
+        torsoYaw += sdSide * (-0.32 * wind + 0.58 * hit);
+        torsoRoll += sdSide * (-0.12 * wind + 0.22 * hit);
+        chs[0] += sdSide * (-0.06 * wind + 0.14 * hit);
+        nck[0] += sdSide * 0.10 * hit;
+        hed[0] += sdSide * 0.08 * hit;
+        headYaw = lerp(headYaw, sdSide * 0.42, clamp(wind + hit, 0, 1));
+        const windH = [sdSide * 0.36, 1.46, 0.18];
+        const hitH  = [sdSide * 0.98, 1.45, -0.32];
+        if (sdSide < 0) {
+          handL = v3.lerp(handL, [ -windH[0], windH[1], windH[2] ], wind);
+          handL = v3.lerp(handL, [ -hitH[0],  hitH[1],  hitH[2]  ], hit);
+          elbowPoleL = [-0.95, 0.12, 0.55];
+        } else {
+          handR = v3.lerp(handR, windH, wind);
+          handR = v3.lerp(handR, hitH,  hit);
+          elbowPoleR = [ 0.95, 0.12, 0.55];
+        }
       }
     }
 
@@ -1487,7 +1532,7 @@ const BikeMesh = (() => {
     RiderMesh.queue(bikeM, {
       pelvis: pel, chest: chs, neck: nck, head: hed,
       handL, handR, footL, footR,
-      headYaw: glance, headPitch, torsoYaw, torsoRoll,
+      headYaw, headPitch, torsoYaw, torsoRoll,
       elbowPoleL, elbowPoleR, kneePoleL, kneePoleR,
     }, riderColors, {
       boost: R.boosting ? 1.0 : (R.trickActive ? 0.55 : 0.0),

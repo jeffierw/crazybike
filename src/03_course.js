@@ -81,6 +81,8 @@ const Course = (() => {
     ramps: [],
     drops: [],       // Random 6m-66m downhill cliff drop-offs (+ waterfalls!): { s, dropH, faceLen, lipH, hasWaterfall, wfSide, wfWidth, id }
     obsBuckets: new Map(),
+    pickupBuckets: new Map(),
+    collectedPickups: new Set(),
     plannedS: 0,
     samples: [],
     rng: RNG(1),
@@ -302,6 +304,8 @@ const Course = (() => {
     C.ramps = [];
     C.drops = [];
     C.obsBuckets.clear();
+    C.pickupBuckets.clear();
+    C.collectedPickups.clear();
     C.samples = [];
     C.plannedS = 0;
     C.rng = RNG(C.seed ^ hashU(C.mountain.idx * 7919 + C.mode.id.length * 131));
@@ -718,6 +722,95 @@ const Course = (() => {
       for (let i = 0; i < arr.length; i++) out.push(arr[i]);
     }
     return out;
+  };
+
+  function buildPickupBucket(bi, bx = 0) {
+    const key = C.mode.endless ? (bx + ',' + bi) : bi;
+    if (C.pickupBuckets.has(key)) return C.pickupBuckets.get(key);
+    if (C.pickupBuckets.size > 260) {
+      const firstKey = C.pickupBuckets.keys().next().value;
+      if (firstKey !== undefined) C.pickupBuckets.delete(firstKey);
+    }
+    const list = [];
+    if (bi < 1) { C.pickupBuckets.set(key, list); return list; }
+    const s0 = bi * BUCKET, s1 = s0 + BUCKET;
+    const rng = RNG(hash3U(bx * 211 + bi * 409, C.mountain.idx * 97 + 19, C.seed));
+
+    const addItem = (s, x, yOff = 1.25, forcedKind = null) => {
+      const sp = C.at(s);
+      if (!C.mode.endless && Math.abs(s - C.finishS) < 35) return;
+      const ck = C.creekAt(s);
+      if (ck.active && Math.abs((x - sp.cx) - ck.u) < ck.hw * 0.7) x += (x >= sp.cx + ck.u ? 3.5 : -3.5);
+      const z = -s;
+      const y = C.height(x, z) + yOff;
+      const kind = forcedKind || (rng() < 0.5 ? 'nitro' : 'bottle');
+      const id = `${key}:${list.length}:${kind[0]}`;
+      list.push({ id, kind, s, x, y, z });
+    };
+
+    // 1. Place pickups at ramps / jump approaches (only in primary band bx===0 or career)
+    if (bx === 0) {
+      for (let k = 0; k < C.ramps.length; k++) {
+        const rm = C.ramps[k];
+        if (rm.s >= s0 && rm.s < s1 && rng() < 0.85) {
+          const sp = C.at(rm.s - 1.5);
+          addItem(rm.s - 1.5, sp.cx + rm.u, 1.45);
+        }
+      }
+      for (let k = 0; k < C.drops.length; k++) {
+        const dr = C.drops[k];
+        if (dr.s >= s0 && dr.s < s1 && rng() < 0.85) {
+          const sp = C.at(dr.s - 2.4);
+          addItem(dr.s - 2.4, sp.cx + (rng() - 0.5) * Math.min(sp.hw, 11), 1.35);
+        }
+      }
+    }
+
+    // 2. Random trail pickups along the open slope
+    const extra = rng() < 0.72 ? 1 : 0;
+    for (let i = 0; i < extra && list.length < 2; i++) {
+      const s = s0 + 6 + rng() * (BUCKET - 12);
+      const sp = C.at(s);
+      if (sp.dropFace > 0.2) continue;
+      const x = C.mode.endless
+        ? (bx * BUCKET + 6 + rng() * (BUCKET - 12))
+        : (sp.cx + (rng() - 0.5) * sp.hw * 1.15);
+      addItem(s, x, 1.20);
+    }
+
+    C.pickupBuckets.set(key, list);
+    return list;
+  }
+
+  C.pickupsNear = function (s0, s1, centerX = null) {
+    const cs0 = Math.max(0, Math.floor(s0 / BUCKET));
+    const cs1 = Math.max(cs0, Math.floor(s1 / BUCKET));
+    const out = [];
+    if (C.mode.endless) {
+      const cxVal = (centerX !== null && centerX !== undefined) ? centerX : C.at((s0 + s1) * 0.5).cx;
+      const cx0 = Math.floor((cxVal - 130) / BUCKET);
+      const cx1 = Math.floor((cxVal + 130) / BUCKET);
+      for (let bs = cs0; bs <= cs1; bs++) {
+        for (let bx = cx0; bx <= cx1; bx++) {
+          const arr = buildPickupBucket(bs, bx);
+          for (let i = 0; i < arr.length; i++) {
+            if (!C.collectedPickups.has(arr[i].id)) out.push(arr[i]);
+          }
+        }
+      }
+      return out;
+    }
+    for (let b = cs0; b <= cs1; b++) {
+      const arr = buildPickupBucket(b, 0);
+      for (let i = 0; i < arr.length; i++) {
+        if (!C.collectedPickups.has(arr[i].id)) out.push(arr[i]);
+      }
+    }
+    return out;
+  };
+
+  C.collectPickup = function (id) {
+    if (id) C.collectedPickups.add(id);
   };
 
   return C;

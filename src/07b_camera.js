@@ -3,14 +3,14 @@ const Camera = (() => {
   Variants.def('cam', '镜头风格', [['a', '贴地激进'], ['b', '标准街机'], ['c', '高广角']], 'b');
 
   const VIEWS = [
-    { id: 'chase', name: '追尾',   en: 'Chase' },
-    { id: 'low',   name: '贴地',   en: 'Low' },
-    { id: 'fpv',   name: '头盔',   en: 'Helmet FPV' },
-    { id: 'fork',  name: '前叉',   en: 'Front Fork' },
-    { id: 'high',  name: '俯瞰',   en: 'High' },
-    { id: 'left',  name: '左侧',   en: 'Left' },
-    { id: 'right', name: '右侧',   en: 'Right' },
-    { id: 'front', name: '正面',   en: 'Front' },
+    { id: 'chase', name: '追尾',   en: 'Chase',      desc: '后上方俯瞰 · 陡坡与断崖前路全开',     descEn: 'Over-helmet downhill framing · clear road ahead' },
+    { id: 'low',   name: '贴地',   en: 'Low',        desc: '紧贴后轮 · 极强贴地速度冲击感',       descEn: 'Low trailing chase · maximum ground speed rush' },
+    { id: 'fpv',   name: '头盔',   en: 'Helmet FPV', desc: '车手第一视角 · 自动遮罩头盔零穿模',   descEn: 'Rider goggles POV · head auto-cut' },
+    { id: 'fork',  name: '前叉',   en: 'Front Fork', desc: '前叉轮上视角 · 贴地直冲坡道',         descEn: 'Front fork wheel-level cam down the trail' },
+    { id: 'high',  name: '俯瞰',   en: 'High',       desc: '高空航拍 · 俯瞰整段峡谷与多线抄近道', descEn: 'Aerial heli cam · full canyon & shortcut view' },
+    { id: 'left',  name: '左侧',   en: 'Left',       desc: '左翼近景跟拍 · 清晰呈现蹬踏与踢拳',   descEn: 'Left flank rig · captures cadence & combat' },
+    { id: 'right', name: '右侧',   en: 'Right',      desc: '右翼近景跟拍 · 清晰呈现压弯与甩尾',   descEn: 'Right flank rig · captures leans & drifts' },
+    { id: 'front', name: '正面',   en: 'Front',      desc: '车前迎面跟拍 · 展示车手神态与特技',   descEn: 'Front hero rig facing rider & stunts' },
   ];
 
   const PRESETS = {
@@ -68,6 +68,9 @@ const Camera = (() => {
     C.init = false;
     C.minClearance = 99;
     C.resetOrbit();
+  };
+  C.snapNext = function () {
+    C.init = false;
   };
 
   // Attach mouse/touch 360-orbit + keyboard camera view hotkeys (1..8, Shift+V, IJKL)
@@ -168,17 +171,18 @@ const Camera = (() => {
     return cam;
   }
 
-  // ---- Main Race / Pause Camera Update ----
-  C.update = function (R, dt, aspect, feel, isPaused = false) {
+  // ---- Main Race / Pause / Live-Preview Camera Update ----
+  C.update = function (R, dt, aspect, feel, isPaused = false, previewView = false) {
     stepOrbit(dt, isPaused);
     const view = VIEWS[C.viewIdx].id;
     const preset = PRESETS[Variants.val.cam] || PRESETS.b;
     const spdNorm = sat((R.speed - 10) / 26);
     const o = C.orbit;
+    const hasOrbit = Math.abs(o.yaw) > 0.02 || Math.abs(o.pit) > 0.02 || Math.abs(o.zoom - 1) > 0.02;
 
-    // Activate FPV lensCut ONLY when inside helmet view (hides helmet, goggles, pack, neck — zero clipping!)
+    // Activate FPV lensCut during race OR active live view preview (unless orbiting outside head)
     if (typeof RiderMesh !== 'undefined') {
-      RiderMesh.fpvRiderId = (!R.crashed && view === 'fpv' && !isPaused) ? R.id : -1;
+      RiderMesh.fpvRiderId = (!R.crashed && view === 'fpv' && (!isPaused || (previewView && !hasOrbit))) ? R.id : -1;
     }
 
     const fx = -Math.sin(R.yaw), fz = -Math.cos(R.yaw);
@@ -197,7 +201,7 @@ const Camera = (() => {
       wantPos = [R.ragPos[0] + Math.sin(ang) * dist, R.ragPos[1] + 2.8 + o.pit * 3.0, R.ragPos[2] + Math.cos(ang) * dist];
       wantTgt = [R.ragPos[0], R.ragPos[1] + 0.55, R.ragPos[2]];
       wantFov = 62 * PI / 180;
-    } else if (isPaused && (Math.abs(o.yaw) > 0.02 || Math.abs(o.pit) > 0.02 || Math.abs(o.zoom - 1) > 0.02)) {
+    } else if (isPaused && hasOrbit && !(previewView && (view === 'fpv' || view === 'fork'))) {
       // Smooth 360-degree environment inspection orbit while paused!
       const baseDist = 5.4 * o.zoom;
       const yawA = R.yaw + o.yaw;
@@ -317,8 +321,8 @@ const Camera = (() => {
       C.roll = wantRoll;
       C.init = true;
     } else {
-      const kPos = (view === 'fpv' || view === 'fork') ? 32 : isPaused ? 14 : 11;
-      const kTgt = (view === 'fpv' || view === 'fork') ? 32 : isPaused ? 14 : 14;
+      const kPos = (view === 'fpv' || view === 'fork') ? 32 : (previewView || isPaused) ? 22 : 11;
+      const kTgt = (view === 'fpv' || view === 'fork') ? 32 : (previewView || isPaused) ? 22 : 14;
       C.pos[0] = damp(C.pos[0], wantPos[0], kPos, dt);
       C.pos[1] = damp(C.pos[1], wantPos[1], kPos * 0.88, dt);
       C.pos[2] = damp(C.pos[2], wantPos[2], kPos, dt);

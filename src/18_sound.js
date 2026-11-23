@@ -389,6 +389,110 @@ const Sound = (() => {
     s.start(now, Math.random(), 0.22);
   }
 
+  function playPunch(hit = false) {
+    if (!ctx || !sfxBus || muted) return;
+    const now = ctx.currentTime;
+    const s = ctx.createBufferSource(); s.buffer = M.white;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.1;
+    f.frequency.setValueAtTime(1350, now); f.frequency.exponentialRampToValueAtTime(340, now + 0.13);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.24, now); g.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+    s.connect(f); f.connect(g); g.connect(sfxBus);
+    s.start(now, Math.random(), 0.16);
+    if (hit) {
+      const o = ctx.createOscillator(), og = ctx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(165, now + 0.03);
+      o.frequency.exponentialRampToValueAtTime(52, now + 0.16);
+      og.gain.setValueAtTime(0.36, now + 0.03);
+      og.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      o.connect(og); og.connect(sfxBus);
+      o.start(now + 0.03); o.stop(now + 0.19);
+    }
+  }
+
+  function playKick(hit = false) {
+    if (!ctx || !sfxBus || muted) return;
+    const now = ctx.currentTime;
+    const s = ctx.createBufferSource(); s.buffer = M.pink;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.0;
+    f.frequency.setValueAtTime(640, now); f.frequency.exponentialRampToValueAtTime(190, now + 0.20);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.32, now); g.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    s.connect(f); f.connect(g); g.connect(sfxBus);
+    s.start(now, Math.random(), 0.24);
+    if (hit) playHit(true);
+  }
+
+  function playPickup(kind = 'nitro') {
+    if (!ctx || !sfxBus || muted) return;
+    const now = ctx.currentTime;
+    const freqs = kind === 'nitro' ? [523.25, 659.25, 783.99] : [440, 587.33];
+    freqs.forEach((freq, i) => {
+      const st = now + i * 0.035;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, st);
+      g.gain.setValueAtTime(0.001, st);
+      g.gain.linearRampToValueAtTime(0.11, st + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.001, st + 0.22);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st + 0.24);
+    });
+    if (kind === 'nitro' && M && M.white) {
+      const s = ctx.createBufferSource(); s.buffer = M.white;
+      const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 2600;
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.12, now); ng.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+      s.connect(f); f.connect(ng); ng.connect(sfxBus);
+      s.start(now, Math.random(), 0.18);
+    }
+  }
+
+  function playPropHit(kind = 'pine', speed = 20) {
+    if (!ctx || !sfxBus || muted) return;
+    const now = ctx.currentTime;
+    const k = clamp(speed / 28, 0.35, 1.2);
+    if (kind === 'pine' || kind === 'cactus') {
+      // Cold-Smoke-inspired crisp needle rustle + dry branch snap!
+      const s = ctx.createBufferSource(); s.buffer = M.sand;
+      const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 0.8;
+      f.frequency.setValueAtTime(kind === 'pine' ? 1650 : 1200, now);
+      f.frequency.exponentialRampToValueAtTime(520, now + 0.26);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.32 * k, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      s.connect(f); f.connect(g); g.connect(sfxBus);
+      s.start(now, Math.random(), 0.30);
+
+      const o = ctx.createOscillator(), og = ctx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(240, now + 0.02);
+      o.frequency.exponentialRampToValueAtTime(75, now + 0.09);
+      og.gain.setValueAtTime(0.18 * k, now + 0.02);
+      og.gain.exponentialRampToValueAtTime(0.001, now + 0.10);
+      o.connect(og); og.connect(sfxBus);
+      o.start(now + 0.02); o.stop(now + 0.12);
+    } else {
+      // Rock/house/barrier heavy thud + gravel scatter!
+      const o = ctx.createOscillator(), og = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(kind === 'lamp' || kind === 'barrier' ? 280 : 128, now);
+      o.frequency.exponentialRampToValueAtTime(42, now + 0.18);
+      og.gain.setValueAtTime(0.30 * k, now);
+      og.gain.exponentialRampToValueAtTime(0.001, now + 0.20);
+      o.connect(og); og.connect(sfxBus);
+      o.start(now); o.stop(now + 0.22);
+
+      const s = ctx.createBufferSource(); s.buffer = M.sand;
+      const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1400;
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.24 * k, now); ng.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      s.connect(f); f.connect(ng); ng.connect(sfxBus);
+      s.start(now, Math.random(), 0.20);
+    }
+  }
+
   // Update continuous binaural wind, mountain breeze, gravel tires, boost & freewheel ratchet!
   // mode: 'race' | 'title' | 'pause' | 'off'
   function update(R, dt, mode = 'race') {
@@ -482,6 +586,10 @@ const Sound = (() => {
     playTakedown,
     playCrash,
     playWhoosh,
+    playPunch,
+    playKick,
+    playPickup,
+    playPropHit,
     toggleMute() {
       muted = !muted;
       applyVolumes();

@@ -80,6 +80,10 @@ const I18N = (() => {
     '正在构筑山脉与悬崖': 'Carving cliffs & trails',
     '点亮天空与光影': 'Lighting atmosphere',
     '准备出发': 'Ready at start gate',
+    '挥拳': 'Punch',
+    '水壶': 'Water Bottle',
+    '氮气': 'Nitro Boost',
+    '当前机位预览': 'ACTIVE VIEW PREVIEW',
   };
 
   let lang = 'zh';

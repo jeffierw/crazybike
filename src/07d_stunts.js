@@ -222,7 +222,6 @@ const Stunts = (() => {
       R.adrenaline = Math.min(100, R.adrenaline + adrGain);
 
       if (pts >= 320 && R.combatTier < 3) R.combatTier++;
-      if (pts >= 180 && R.bottles < 3) R.bottles++;
       const fx = -Math.sin(R.yaw), fz = -Math.cos(R.yaw);
       const kick = clamp(pts / 200, 1.8, 5.6);
       R.vel[0] += fx * kick;

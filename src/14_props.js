@@ -223,11 +223,36 @@ const Props = (() => {
     }
   }
 
+  function emitPickups(s0, s1, time, centerX = null) {
+    if (!Course.pickupsNear) return;
+    const pks = Course.pickupsNear(s0, s1, centerX);
+    for (let i = 0; i < pks.length; i++) {
+      const pk = pks[i];
+      const bob = Math.sin(time * 3.8 + i * 1.1) * 0.22;
+      const spin = time * 2.4 + i;
+      const py = pk.y + bob;
+      if (pk.kind === 'nitro') {
+        // Glowing presssurized Nitro canister + golden ring halo
+        Solid.pushTRS('cyl', [pk.x, py, pk.z], spin, 0.28, 0, [0.34, 0.82, 0.34], [1.4, 0.42, 0.08], -1.0);
+        Solid.pushTRS('cyl', [pk.x, py + 0.46, pk.z], spin, 0.28, 0, [0.16, 0.16, 0.16], [1.9, 0.88, 0.20], -1.0);
+        Solid.pushTRS('cyl', [pk.x, py - 0.55, pk.z], spin, 0, 0, [0.85, 0.05, 0.85], [1.3, 0.65, 0.14], -1.0);
+      } else {
+        // Glowing sky-blue Water Bottle + crisp white cap + cyan ring halo
+        Solid.pushTRS('cyl', [pk.x, py, pk.z], spin, 0.24, 0, [0.30, 0.72, 0.30], [0.18, 0.85, 1.35], -1.0);
+        Solid.pushTRS('cyl', [pk.x, py + 0.42, pk.z], spin, 0.24, 0, [0.15, 0.16, 0.15], [1.5, 1.5, 1.6], -1.0);
+        Solid.pushTRS('cyl', [pk.x, py - 0.55, pk.z], spin, 0, 0, [0.85, 0.05, 0.85], [0.22, 0.82, 1.2], -1.0);
+      }
+    }
+  }
+
   function emit(centerS, time, quality = 'auto', centerX = null, camEye = null) {
     const farDist = typeof Quality !== 'undefined' ? Quality.cfg(quality).farDist
       : ((quality === 'low' || quality === 'smooth') ? 185 : quality === 'high' ? 290 : 235);
     const s0 = Math.max(0, centerS - 28);
     const s1 = centerS + farDist;
+
+    // 0. Trail & ramp Nitro / Water Bottle pickups
+    emitPickups(s0, Math.min(s1, centerS + 165), time, centerX);
 
     // 1. Obstacles & biome landmarks (2D infinite grid around rider in Endless + camera lens canopy cull!)
     const obs = Course.obstaclesNear(s0, s1, centerX);
