@@ -128,6 +128,15 @@ const UI = (() => {
           </div>
         </div>
 
+        <div class="rail-sec">
+          <div class="rail-label">${t('攻击击倒对手')} · COMBAT K.O.</div>
+          <div class="pill-row">
+            <button class="pill ${Physics.getKnockdown() ? 'on' : ''}" data-ko="1">${t('开启 · 击飞倒地')}</button>
+            <button class="pill ${!Physics.getKnockdown() ? 'on' : ''}" data-ko="0">${t('关闭 · 仅推挤')}</button>
+          </div>
+          <div style="font-size:11px;color:var(--faint);margin-top:6px;line-height:1.45;">${t('仅影响格斗重击/水壶/加速撞击，撞树与特技落地永远不会摔车')}</div>
+        </div>
+
         ${Variants.defs.map(d => `
           <div class="rail-sec">
             <div class="rail-label">${t(d.label)}</div>
@@ -219,6 +228,9 @@ const UI = (() => {
     if (slMus) slMus.oninput = () => { Sound.unlock(); Sound.setMusicVol(slMus.value / 100); slMus.nextElementSibling.textContent = slMus.value + '%'; };
     const setMute = document.getElementById('set-mute');
     if (setMute) setMute.onclick = () => { Sound.unlock(); Sound.toggleMute(); redraw(); };
+    root().querySelectorAll('[data-ko]').forEach(b => {
+      b.onclick = () => { Physics.setKnockdown(b.dataset.ko === '1'); redraw(); };
+    });
     root().querySelectorAll('[data-vn]').forEach(b => {
       b.onclick = () => { Variants.set(b.dataset.vn, b.dataset.vi); redraw(); };
     });
@@ -688,7 +700,7 @@ const UI = (() => {
 
         <button id="p-photo" class="rail-item"><span>📷 ${t('拍照模式')}</span><small>P</small></button>
         <button id="p-views" class="rail-item"><span>🎥 ${t('视角')}</span><small>${viewName(Camera.currentView())}</small></button>
-        <button id="p-settings" class="rail-item"><span>⚙ ${t('设置')}</span><small>${I18N.lang.toUpperCase()} · ${t('声音')}</small></button>
+        <button id="p-settings" class="rail-item"><span>⚙ ${t('设置')}</span><small>${Physics.getKnockdown() ? 'KO ON' : 'SHOVE'} · ${I18N.lang.toUpperCase()}</small></button>
         <button id="p-controls" class="rail-item"><span>⌨ ${t('操作说明')}</span><small>KEYS</small></button>
         <button id="p-restart" class="rail-item"><span>↻ ${t('重新开局')}</span><small></small></button>
         <button id="p-garage" class="rail-item"><span>🔧 ${t('改装车库')}</span><small>$${Career.data.cash}</small></button>

@@ -1,34 +1,56 @@
-// ---------------------------------------------------------------- 08_ai: 7 physics-driven AI rivals, 5-axis skill profiles, 4 personalities & endless traffic
+// ---------------------------------------------------------------- 08_ai: 7 physics-driven AI rivals, adaptive skill+upgrade matchmaking & endless traffic
 const AI = (() => {
   const ROSTER = [
-    { name: '疯狗杰克', en: 'Mad Jack',    personality: 'brawler',   frameCol: [0.88, 0.14, 0.16], jerseyCol: [0.18, 0.18, 0.22], helmetCol: [0.96, 0.25, 0.18], role: 'pack' },
-    { name: '闪电艾娃', en: 'Bolt Ava',    personality: 'speedster', frameCol: [0.10, 0.84, 0.94], jerseyCol: [0.96, 0.96, 0.98], helmetCol: [0.12, 0.88, 0.96], role: 'lead' },
-    { name: '飞人里奥', en: 'Sky Leo',     personality: 'showoff',   frameCol: [0.45, 0.95, 0.18], jerseyCol: [0.14, 0.24, 0.16], helmetCol: [0.62, 1.00, 0.22], role: 'pack' },
-    { name: '铁锤布鲁', en: 'Sledge Bru',  personality: 'brawler',   frameCol: [0.96, 0.56, 0.10], jerseyCol: [0.34, 0.22, 0.12], helmetCol: [0.95, 0.68, 0.14], role: 'chase' },
-    { name: '幽灵凯',   en: 'Ghost Kai',   personality: 'speedster', frameCol: [0.64, 0.28, 0.96], jerseyCol: [0.16, 0.14, 0.26], helmetCol: [0.82, 0.45, 1.00], role: 'pack' },
-    { name: '野猫米娅', en: 'Wildcat Mia', personality: 'showoff',   frameCol: [0.96, 0.22, 0.64], jerseyCol: [0.22, 0.14, 0.22], helmetCol: [1.00, 0.42, 0.76], role: 'chase' },
-    { name: '山大王雷克斯', en: 'King Rex', personality: 'boss',      frameCol: [0.98, 0.78, 0.14], jerseyCol: [0.12, 0.12, 0.14], helmetCol: [1.00, 0.86, 0.22], role: 'lead' },
+    { name: '疯狗杰克', en: 'Mad Jack',    personality: 'brawler',   frameCol: [0.88, 0.14, 0.16], jerseyCol: [0.18, 0.18, 0.22], helmetCol: [0.96, 0.25, 0.18], role: 'pack',  band: 'match',  relTier:  0.00, relPace:  0.004 },
+    { name: '闪电艾娃', en: 'Bolt Ava',    personality: 'speedster', frameCol: [0.10, 0.84, 0.94], jerseyCol: [0.96, 0.96, 0.98], helmetCol: [0.12, 0.88, 0.96], role: 'lead',  band: 'strong', relTier:  0.35, relPace:  0.025 },
+    { name: '飞人里奥', en: 'Sky Leo',     personality: 'showoff',   frameCol: [0.45, 0.95, 0.18], jerseyCol: [0.14, 0.24, 0.16], helmetCol: [0.62, 1.00, 0.22], role: 'pack',  band: 'match',  relTier:  0.00, relPace: -0.006 },
+    { name: '铁锤布鲁', en: 'Sledge Bru',  personality: 'brawler',   frameCol: [0.96, 0.56, 0.10], jerseyCol: [0.34, 0.22, 0.12], helmetCol: [0.95, 0.68, 0.14], role: 'chase', band: 'weak',   relTier: -0.55, relPace: -0.045 },
+    { name: '幽灵凯',   en: 'Ghost Kai',   personality: 'speedster', frameCol: [0.64, 0.28, 0.96], jerseyCol: [0.16, 0.14, 0.26], helmetCol: [0.82, 0.45, 1.00], role: 'pack',  band: 'match',  relTier:  0.15, relPace:  0.012 },
+    { name: '野猫米娅', en: 'Wildcat Mia', personality: 'showoff',   frameCol: [0.96, 0.22, 0.64], jerseyCol: [0.22, 0.14, 0.22], helmetCol: [1.00, 0.42, 0.76], role: 'chase', band: 'weak',   relTier: -0.80, relPace: -0.070 },
+    { name: '山大王雷克斯', en: 'King Rex', personality: 'boss',      frameCol: [0.98, 0.78, 0.14], jerseyCol: [0.12, 0.12, 0.14], helmetCol: [1.00, 0.86, 0.22], role: 'lead',  band: 'strong', relTier:  0.55, relPace:  0.045 },
   ];
 
-  // difficulty 0 (Rookie Red Rock) .. 3 (Champion Hillside Town)
-  function skillFor(diff, personality) {
-    const d = clamp(diff, 0, 3) / 3;
-    const isBoss = personality === 'boss';
+  // Adaptive skill calculation blending player upgrade average + player skill EMA + course difficulty
+  function skillFor(diff, r, avgUpg = 0, playerSkill = 0.42) {
+    const baseTier = clamp(avgUpg + (playerSkill - 0.45) * 0.85 + diff * 0.10, 0, 4);
+    const tier = clamp(Math.round(baseTier + r.relTier), 0, 4);
+    const bandShift = r.band === 'strong' ? 0.12 : r.band === 'weak' ? -0.10 : 0;
+    const sNorm = clamp((baseTier / 4) * 0.55 + playerSkill * 0.45 + bandShift, 0.15, 0.96);
+    const pers = r.personality;
+    const isBoss = pers === 'boss';
     return {
-      lookAhead:    lerp(0.48, 1.15, d) + (personality === 'speedster' || isBoss ? 0.15 : 0),
-      shortcutRate: lerp(0.18, 0.76, d) + (personality === 'speedster' ? 0.18 : 0),
-      trickSkill:   lerp(0.22, 0.88, d) + (personality === 'showoff' || isBoss ? 0.16 : 0),
-      aggro:        lerp(0.25, 0.86, d) + (personality === 'brawler' || isBoss ? 0.18 : 0),
-      bikeTier:     Math.min(4, Math.round(lerp(0, 3.6, d) + (isBoss ? 1 : 0))),
+      lookAhead:    lerp(0.55, 1.15, sNorm) + (pers === 'speedster' || isBoss ? 0.12 : 0),
+      shortcutRate: lerp(0.18, 0.78, sNorm) + (pers === 'speedster' ? 0.14 : 0),
+      trickSkill:   lerp(0.28, 0.90, sNorm) + (pers === 'showoff' || isBoss ? 0.14 : 0),
+      aggro:        lerp(0.24, 0.84, sNorm) + (pers === 'brawler' || isBoss ? 0.15 : 0),
+      bikeTier:     tier,
     };
   }
 
-  function spawnPack(diff = 0) {
+  function resolvePlayerCtx(diff, playerCtx) {
+    if (playerCtx && typeof playerCtx === 'object') {
+      return {
+        avgUpg: clamp(+playerCtx.avgUpg || 0, 0, 4),
+        playerSkill: clamp(playerCtx.playerSkill !== undefined ? +playerCtx.playerSkill : 0.42, 0.15, 0.95),
+      };
+    }
+    if (typeof Career !== 'undefined' && Career.avgUpgrade && Career.data) {
+      return {
+        avgUpg: clamp(Career.avgUpgrade(), 0, 4),
+        playerSkill: clamp(Career.data.playerSkill ?? 0.42, 0.15, 0.95),
+      };
+    }
+    return { avgUpg: clamp(diff, 0, 3), playerSkill: 0.42 };
+  }
+
+  function spawnPack(diff = 0, playerCtx = null) {
+    const pCtx = resolvePlayerCtx(diff, playerCtx);
     const rivals = [];
     for (let i = 0; i < ROSTER.length; i++) {
       const r = ROSTER[i];
-      const sk = skillFor(diff, r.personality);
+      const sk = skillFor(diff, r, pCtx.avgUpg, pCtx.playerSkill);
       const t = sk.bikeTier;
+      const paceMul = clamp(0.955 + (pCtx.playerSkill - 0.42) * 0.14 + r.relPace + diff * 0.012, 0.84, 1.09);
       const startRow = Math.floor((i + 1) / 2);
       const startCol = ((i % 2) === 0 ? -1 : 1) * (2.6 + (i % 3) * 1.4);
       const startS = Course.mode.endless ? (28 + i * 24) : (14 + startRow * 3.8);
@@ -44,9 +66,12 @@ const AI = (() => {
         helmetCol: r.helmetCol,
         s: startS,
         u: startCol,
-        initSpeed: 10 + (r.role === 'lead' ? 2 : 0),
+        initSpeed: 9.5 + (r.band === 'strong' ? 0.8 : r.band === 'weak' ? -0.6 : 0),
       });
       rider.aiRole = r.role;
+      rider.aiBand = r.band;
+      rider.aiPaceMul = +paceMul.toFixed(4);
+      rider.aiTier = t;
       rider.aiTargetU = startCol;
       rivals.push(rider);
     }
@@ -117,25 +142,26 @@ const AI = (() => {
     const steer = clamp(-yawErr * 2.15, -1, 1);
     const sharpTurn = Math.abs(yawErr) > 0.44 && R.speed > 20;
 
-    // 3. Rubber-banding director pacing (keeps exciting pack density!)
-    let pedal = true, boost = false, brake = sharpTurn;
+    // 3. Adaptive matched pacing + symmetric pack rubber-banding (keeps intense fair competition!)
+    const targetSpd = Physics.statsOf(R).topSpeed * (R.aiPaceMul || 0.96);
+    let pedal = R.speed < targetSpd * 1.02, boost = false, brake = sharpTurn;
     if (Course.mode.endless) {
-      // In Endless mode, riders stay brisk and fun to overtake & battle
-      pedal = R.speed < (21 + sk.bikeTier * 2.4);
+      pedal = R.speed < targetSpd * 0.92;
       boost = R.nemesis && dsPlayer < -6 && R.adrenaline > 25;
     } else {
-      const leadWindow = R.aiRole === 'lead' ? 28 : R.aiRole === 'pack' ? 6 : -14;
+      const band = R.aiBand || (R.aiRole === 'lead' ? 'strong' : R.aiRole === 'chase' ? 'weak' : 'match');
+      const leadWindow = band === 'strong' ? 14 : band === 'match' ? 0 : -16;
       const gap = dsPlayer - leadWindow;
-      if (gap > 38) {
-        // Far ahead of player: ease off pedal slightly so player can catch up with good lines/tricks
+      if (gap > 26) {
+        // Ahead of target band window: coast briefly so race stays tense without robotic slowdown
         pedal = false;
-        if (gap > 68 && R.speed > 18) brake = true;
-      } else if (gap < -22) {
-        // Behind player: sprint & burn adrenaline to keep pressure on!
+        if (gap > 52 && R.speed > 17) brake = true;
+      } else if (gap < -24) {
+        // Behind target band window: push cadence, and boost if challenger/matcher or Nemesis
         pedal = true;
-        if (R.adrenaline > 30 && gap < -32) boost = true;
+        if (band !== 'weak' && gap < -36 && R.adrenaline > 38) boost = true;
       }
-      if (R.nemesis && dsPlayer < 4 && R.adrenaline > 20) boost = true;
+      if (R.nemesis && dsPlayer < 2 && R.adrenaline > 22) boost = true;
     }
 
     // 4. Jump off kicker lips & pull mid-air tricks!
@@ -202,7 +228,7 @@ const AI = (() => {
         R.yaw = Math.atan2(-sp.dcx, 1);
         R.pitch = -Math.atan(sp.slope);
         R.roll = 0;
-        const spd = clamp(player.speed * 0.82, 14, 24);
+        const spd = clamp(player.speed * (R.aiPaceMul || 0.95) * 0.92, 14, 34);
         R.vel[0] = -Math.sin(R.yaw) * spd;
         R.vel[1] = 0;
         R.vel[2] = -Math.cos(R.yaw) * spd;

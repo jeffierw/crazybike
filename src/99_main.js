@@ -104,7 +104,8 @@ const App = (() => {
 
     player = createPlayerFromCareer(12);
     player.idleMode = false;
-    rivals = isSolo ? [] : AI.spawnPack(diff);
+    const pCtx = { avgUpg: Career.avgUpgrade(), playerSkill: Career.data.playerSkill ?? 0.42 };
+    rivals = isSolo ? [] : AI.spawnPack(diff, pCtx);
     allRiders = [player, ...rivals];
     state = 'race';
     if (typeof document !== 'undefined' && document.activeElement && document.activeElement.blur) {
@@ -250,9 +251,9 @@ const App = (() => {
       } else if (ev.type === 'dodge') {
         Particles.burstImpact(ev.pos, [1.5, 0.72, 0.25], 12);
         if (ev.rider.isPlayer) { Feel.jolt(0.28, 0.24, 0); Feel.nearMiss(ev.rider.wobbleDir || 1); Sound.playWhoosh(); }
-      } else if (ev.type === 'crash') {
-        Particles.burstImpact(ev.pos, [1.5, 0.45, 0.15], 14);
-        if (ev.rider.isPlayer) { Feel.jolt(0.26, 0.22, 0); Sound.playWhoosh(); }
+      } else if (ev.type === 'knockdown' || ev.type === 'crash') {
+        Particles.burstImpact(ev.pos, [1.8, 0.36, 0.12], 18);
+        if (ev.rider.isPlayer) { Feel.jolt(0.55, 0.60, 0.04); Sound.playCrash(); }
       } else if (ev.type === 'scrape' && ev.rider.isPlayer) {
         Particles.burstImpact(ev.pos, [1.4, 0.85, 0.3], 8);
         Feel.jolt(0.18, 0.14, 0); Sound.playWhoosh();
@@ -562,6 +563,8 @@ const App = (() => {
       qualityTier: () => Quality.tier,
       qualityInfo: () => Quality.info(),
       setQuality: q => { const tier = Quality.select(q); Post.setQuality(tier); },
+      knockdown: () => Physics.getKnockdown(),
+      setKnockdown: v => Physics.setKnockdown(v),
       wildlifeCount: () => Wildlife.count(),
       finishNow: () => finalizeRun(),
       career: () => Career.data,
@@ -572,7 +575,7 @@ const App = (() => {
         adrenaline: +player.adrenaline.toFixed(0), view: Camera.currentView().id,
         minCamClear: +Camera.minClearance.toFixed(2),
         rivalsCount: rivals.length,
-        rivals: rivals.map(r => ({ name: r.name, s: Math.round(r.s), rank: r.rank, nemesis: r.nemesis })),
+        rivals: rivals.map(r => ({ name: r.name, s: Math.round(r.s), rank: r.rank, tier: r.aiTier, band: r.aiBand, paceMul: r.aiPaceMul, nemesis: r.nemesis })),
       }) : null,
       sim(secs, fn, opts = {}) {
         Input.setScript(fn || (() => AI.decideInput(player, rivals[0] || player, allRiders, 1 / 60, raceTime)));

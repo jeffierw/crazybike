@@ -2,6 +2,13 @@
 const Physics = (() => {
   Variants.def('feel', '漂移手感', [['a', '稳健抓地'], ['b', '暴走甩尾']], 'b');
 
+  const KNOCKDOWN_KEY = 'crazybike_knockdown';
+  let knockdownEnabled = true;
+  try {
+    const saved = localStorage.getItem(KNOCKDOWN_KEY);
+    if (saved === '0' || saved === 'false') knockdownEnabled = false;
+  } catch (_) {}
+
   const events = [];
   function emit(ev) { events.push(ev); }
 
@@ -109,7 +116,7 @@ const Physics = (() => {
     };
   }
 
-  // V4 Dodge-Only Impact Response across ALL modes (ZERO ragdoll crashes / ZERO bike detachment / ZERO forced respawn!)
+  // V4 Dodge-Only Impact Response (used for obstacle rubs & combat when knockdowns are disabled)
   function triggerCrash(R, reason, impulseX = 0, impulseZ = 0, attacker = null) {
     if (R.finished) return;
     const side = sign(impulseX) || (R.wobbleDir ? -R.wobbleDir : (Math.random() < 0.5 ? -1 : 1));
@@ -125,19 +132,54 @@ const Physics = (() => {
     emit({ type: 'dodge', rider: R, reason, attacker: attacker || R.lastHitBy, pos: R.pos.slice() });
   }
 
+  // V5 Configurable Combat Knockdown (only triggers on combat KO when knockdownEnabled === true; never on obstacles/tricks!)
+  function knockdownRider(R, reason, impulseX = 0, impulseZ = 0, attacker = null) {
+    if (R.finished) return;
+    if (!knockdownEnabled) {
+      triggerCrash(R, reason, impulseX, impulseZ, attacker);
+      return;
+    }
+    if (R.crashed) return;
+    const side = sign(impulseX) || (Math.random() < 0.5 ? -1 : 1);
+    R.crashed = true;
+    R.crashTimer = 1.25;
+    R.crashes++;
+    R.air = false;
+    R.airTime = 0;
+    R.trickType = null;
+    R.trickActive = false;
+    R.trickHeld = false;
+    R.boosting = false;
+    R.staggerCd = 1.5;
+    if (attacker) R.lastHitBy = attacker;
+
+    const vxBase = R.vel[0] * 0.65, vzBase = R.vel[2] * 0.65;
+    R.ragPos = [R.pos[0], R.pos[1] + 0.42, R.pos[2]];
+    R.ragVel = [vxBase + clamp(impulseX || side * 6.5, -12, 12), Math.max(5.5, 4.5 + Math.abs(impulseX) * 0.25), vzBase + impulseZ];
+    R.ragRot = [R.pitch, R.yaw, R.roll];
+    R.ragAngVel = [6.2, (Math.random() - 0.5) * 6.0, side * 7.4];
+
+    R.bikeCrashPos = [R.pos[0], R.pos[1] + 0.36, R.pos[2]];
+    R.bikeCrashVel = [R.vel[0] * 0.72 - side * 3.5, 4.2, R.vel[2] * 0.74 + impulseZ * 0.5];
+    R.bikeCrashRot = [R.pitch, R.yaw, R.roll];
+    R.bikeCrashAngVel = [-4.8, side * 3.8, -side * 7.8];
+
+    emit({ type: 'knockdown', rider: R, reason, attacker: attacker || R.lastHitBy, pos: R.pos.slice() });
+  }
+
   function respawnRider(R) {
     R.crashed = false;
     R.crashTimer = 0;
     const s = Math.max(10, R.s - 3);
     const sp = Course.at(s);
-    const safeU = clamp(R.u * 0.4, -sp.hw * 0.55, sp.hw * 0.55);
+    const safeU = Course.mode.endless ? R.u : clamp(R.u * 0.5, -sp.hw * 0.65, sp.hw * 0.65);
     R.pos[0] = sp.cx + safeU;
     R.pos[2] = -s;
     R.pos[1] = Course.height(R.pos[0], R.pos[2]) + 0.12;
     R.yaw = Math.atan2(-sp.dcx, 1);
     R.pitch = -Math.atan(sp.slope);
     R.roll = 0;
-    const spd = 12;
+    const spd = 14;
     R.vel[0] = -Math.sin(R.yaw) * spd;
     R.vel[1] = 0;
     R.vel[2] = -Math.cos(R.yaw) * spd;
@@ -147,6 +189,7 @@ const Physics = (() => {
     R.susp = 0.08;
     R.suspV = 0;
     R.wobble = 0;
+    R.staggerCd = 1.4;
     emit({ type: 'respawn', rider: R });
   }
 
@@ -489,8 +532,15 @@ const Physics = (() => {
     createRider,
     stepRider,
     triggerCrash,
+    knockdownRider,
     respawnRider,
     statsOf,
+    getKnockdown: () => knockdownEnabled,
+    setKnockdown(v) {
+      knockdownEnabled = !!v;
+      try { localStorage.setItem(KNOCKDOWN_KEY, knockdownEnabled ? '1' : '0'); } catch (_) {}
+      return knockdownEnabled;
+    },
     drainEvents() { const copy = events.slice(); events.length = 0; return copy; },
   };
 })();

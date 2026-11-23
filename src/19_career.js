@@ -56,6 +56,7 @@ const Career = (() => {
       cash: 400, // Starter cash so player can customize or buy first upgrade quickly!
       upgrades: { frame: 0, fork: 0, drive: 0, tires: 0, combat: 0 },
       paintIdx: 0,
+      playerSkill: 0.42, // Adaptive EMA skill rating (0.15..0.95) for dynamic AI matchmaking
       unlockedMountains: ['redrock'],
       results: {}, // eventId -> { bestRank, bestTime }
       endlessBest: { dist: 0, takedowns: 0, trickScore: 0 },
@@ -66,6 +67,11 @@ const Career = (() => {
 
   let data = defaultSave();
 
+  function avgUpgrade() {
+    const u = data.upgrades || {};
+    return ((u.frame || 0) + (u.fork || 0) + (u.drive || 0) + (u.tires || 0) + (u.combat || 0)) / 5;
+  }
+
   function load() {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
@@ -75,6 +81,8 @@ const Career = (() => {
         data.upgrades = Object.assign({ frame: 0, fork: 0, drive: 0, tires: 0, combat: 0 }, parsed.upgrades || {});
         data.endlessBest = Object.assign({ dist: 0, takedowns: 0, trickScore: 0 }, parsed.endlessBest || {});
         data.cheats = Object.assign({ lowGrav: false, megaBat: false }, parsed.cheats || {});
+        if (typeof data.playerSkill !== 'number' || !Number.isFinite(data.playerSkill)) data.playerSkill = 0.42;
+        data.playerSkill = clamp(data.playerSkill, 0.15, 0.95);
       }
     } catch (e) {}
     return data;
@@ -127,6 +135,9 @@ const Career = (() => {
 
     data.cash += total;
     data.totalTakedowns += summary.takedowns;
+    const rankDelta = r === 1 ? 0.075 : r === 2 ? 0.035 : r === 3 ? 0.015 : r <= 5 ? 0 : -0.055;
+    const spdBonus = (summary.maxSpeedKmh || 0) >= 105 ? 0.01 : 0;
+    data.playerSkill = +clamp((data.playerSkill ?? 0.42) + rankDelta + spdBonus, 0.15, 0.95).toFixed(3);
 
     const prev = data.results[event.id];
     if (!prev || r < prev.bestRank || (r === prev.bestRank && summary.time < prev.bestTime)) {
@@ -180,6 +191,7 @@ const Career = (() => {
     recordCareerFinish,
     recordEndlessRun,
     wonCount,
+    avgUpgrade,
     resetSave() { data = defaultSave(); save(); },
   };
 })();

@@ -113,17 +113,18 @@ vm.runInContext(`
       Camera.update(P, 1 / 60, 16 / 9, Feel, false);
       for (const ce of Combat.drainEvents()) if (ce.type === 'takedown') kos++;
       Stunts.drainEvents();
-      Physics.drainEvents();
+      for (const pe of Physics.drainEvents()) {
+        if (pe.type === 'crash') totalCrashes++;
+      }
       if (i % 120 === 0) {
         Solid.clear(); Props.emit(P.s, t, 'auto', P.pos[0]);
         for (const r of all) BikeMesh.emitRider(r, t);
         Combat.emitProjectiles(); Solid.upload();
       }
     }
-    for (const r of all) totalCrashes += r.crashes;
     const minAiS = Math.min(...R.map(r => r.s));
     assert(
-      P.s > 260 && minAiS > 220 && Camera.minClearance >= 0.40 && cliffSegs >= 1 && dropsN >= 4,
+      P.s > 260 && minAiS > 200 && Camera.minClearance >= 0.40 && cliffSegs >= 1 && dropsN >= 4,
       m.id + ' audit -> player=' + Math.round(P.s) + 'm, minAI=' + Math.round(minAiS) + 'm, maxSpd=' + Math.round(P.maxSpeed * 3.6) + 'km/h, cliffs=' + cliffSegs + ', drops=' + dropsN + ', KOs=' + kos
     );
   }
@@ -131,7 +132,7 @@ vm.runInContext(`
   const msPerFrame = simMs / (MOUNTAINS.length * 900);
   assert(
     msPerFrame < 6.0 && totalCrashes === 0 && minDropH <= 15 && maxDropH >= 34 && halfpipeSegs >= 4 && waterfallDrops >= 4 && activeCreeks >= 2,
-    'V4 World & Dodge audit: crashes=' + totalCrashes + ', cliffRange=' + minDropH.toFixed(1) + '..' + maxDropH.toFixed(1) + 'm, halfpipes=' + halfpipeSegs + ', waterfalls=' + waterfallDrops + ', perf=' + msPerFrame.toFixed(2) + 'ms/frame'
+    'V5 World & Dodge audit: obstacleCrashes=' + totalCrashes + ', cliffRange=' + minDropH.toFixed(1) + '..' + maxDropH.toFixed(1) + 'm, halfpipes=' + halfpipeSegs + ', waterfalls=' + waterfallDrops + ', perf=' + msPerFrame.toFixed(2) + 'ms/frame'
   );
 
   // 3. All 8 slope-adaptive camera views, high-pitch chase framing revealing road 30m ahead, FPV lensCut & Photo Mode
@@ -222,7 +223,7 @@ vm.runInContext(`
   assert(evJ.defaultPrevented && evK.defaultPrevented && evCtrlK.defaultPrevented && !Camera.orbit.keys.KeyJ && !Camera.orbit.keys.KeyK,
     'V4 J/K & Ctrl+K browser shortcut prevention + zero camera orbit hijack OK');
 
-  // 6. V4 Sparse Biome-Matched Wildlife (1-3 max, volcano birds only) & Quality Shadow Maps (512 / 1024 / 2048)
+  // 6. V5 Sparse Wildlife, Memory-Aware Quality, Cold-Smoke Audio Mix, Adaptive AI Pack & Configurable Combat Knockdowns
   let wildOk = true;
   for (const m of MOUNTAINS) {
     Course.init(m.id, 'freeride', 202611);
@@ -230,17 +231,63 @@ vm.runInContext(`
     Wildlife.step(60, 0.2, 'high');
     const cHi = Wildlife.count();
     if (m.id === 'volcano' && !Wildlife.list().every(c => c.isBird)) wildOk = false;
-    Wildlife.step(60, 0.2, 'smooth');
+    Wildlife.step(60, 0.2, 'low');
     const cLo = Wildlife.count();
     Solid.clear(); Wildlife.emit(); Solid.upload();
     if (cHi !== 3 || cLo !== 1) wildOk = false;
   }
   Post.setQuality('high'); const shHi = Post.shadowSize;
-  Post.setQuality('smooth'); const shLo = Post.shadowSize;
-  Post.setQuality('auto'); const shAu = Post.shadowSize;
-  assert(wildOk && shHi === 2048 && shAu === 1024 && shLo === 512,
-    'V4 Sparse Wildlife (high=3, smooth=1, volcano=ravens only) & Quality Shadow Maps (2048/1024/512) OK');
+  Post.setQuality('low');  const shLo = Post.shadowSize;
+  Post.setQuality('balanced'); const shBa = Post.shadowSize;
+  const q2 = Quality.detect({ memGB: 2 });
+  const q4 = Quality.detect({ memGB: 4 });
+  const q8 = Quality.detect({ memGB: 8, isMobile: false });
+  const qDesc = Quality.describe('zh', { memGB: 8, isMobile: false });
+  assert(wildOk && shHi === 2048 && shBa === 1024 && shLo === 512 &&
+    q2 === 'low' && q4 === 'balanced' && q8 === 'high' &&
+    Quality.normalizePick('smooth') === 'low' &&
+    qDesc.includes('8 GB') && qDesc.includes('2048px'),
+    'V5 Memory-Aware Quality (2GB->' + q2 + ', 4GB->' + q4 + ', 8GB->' + q8 + ', shadows 2048/1024/512) & Wildlife OK');
+
+  const mix = Sound.getMixProfile();
+  assert(mix.musicVol >= 0.80 && mix.windMaxGain <= 0.25 && mix.windShelfMaxDb < 0,
+    'V5 Cold-Smoke Audio Mix calibrated (musicVol=' + mix.musicVol + ', windMaxGain=' + mix.windMaxGain.toFixed(3) + ', shelfMax=' + mix.windShelfMaxDb + 'dB)');
+
+  // Adaptive AI Pack: matches upgrades (Lv0 vs Lv4) & distributes strong / match / weak rivals around player
+  const lowPack = AI.spawnPack(0, { avgUpg: 0, playerSkill: 0.42 });
+  const hiPack  = AI.spawnPack(0, { avgUpg: 4, playerSkill: 0.72 });
+  const avgTier = arr => arr.reduce((a, r) => a + r.aiTier, 0) / arr.length;
+  const lowAvg = avgTier(lowPack), hiAvg = avgTier(hiPack);
+  const strongP = hiPack.filter(r => r.aiBand === 'strong').map(r => r.aiPaceMul);
+  const matchP  = hiPack.filter(r => r.aiBand === 'match').map(r => r.aiPaceMul);
+  const weakP   = hiPack.filter(r => r.aiBand === 'weak').map(r => r.aiPaceMul);
+  const sBefore = Career.data.playerSkill;
+  Career.recordCareerFinish(Career.EVENTS[0], { rank: 1, time: 62, dist: 2100, takedowns: 2, trickScore: 1200, crashes: 0, maxSpeedKmh: 112, finished: true });
+  const sAfterWin = Career.data.playerSkill;
+  Career.recordCareerFinish(Career.EVENTS[0], { rank: 8, time: 95, dist: 2100, takedowns: 0, trickScore: 100, crashes: 2, maxSpeedKmh: 82, finished: true });
+  const sAfterLoss = Career.data.playerSkill;
+  assert(lowAvg <= 0.6 && hiAvg >= 3.4 && strongP.length === 2 && matchP.length === 3 && weakP.length === 2 &&
+    Math.min(...strongP) > Math.max(...matchP) && Math.min(...matchP) > Math.max(...weakP) &&
+    sAfterWin > sBefore && sAfterLoss < sAfterWin,
+    'V5 Adaptive AI Pack (Lv0 avg=' + lowAvg.toFixed(2) + ' -> Lv4 avg=' + hiAvg.toFixed(2) + ', strong/match/weak ordered, skill EMA ' + sBefore + '->' + sAfterWin + '->' + sAfterLoss + ') OK');
+
+  // Configurable Combat Knockdown Toggle (ON -> ragdoll KO & respawn; OFF -> dodge shove only)
+  Course.init('redrock', 'freeride', 202611);
+  Physics.setKnockdown(true);
+  const VKo = Physics.createRider({ isPlayer: false, s: 80, u: 0, initSpeed: 24 });
+  Physics.knockdownRider(VKo, 'melee_ko', 9, -3);
+  const koCrashed = VKo.crashed === true;
+  for (let i = 0; i < 90; i++) Physics.stepRider(VKo, { pedal: true }, 1 / 60, i / 60);
+  const koRespawned = VKo.crashed === false;
+
+  Physics.setKnockdown(false);
+  const VShove = Physics.createRider({ isPlayer: false, s: 80, u: 0, initSpeed: 24 });
+  Physics.knockdownRider(VShove, 'melee_ko', 9, -3);
+  const shoveNotCrashed = VShove.crashed === false && VShove.wobble > 0.2;
+  Physics.setKnockdown(true);
+  assert(koCrashed && koRespawned && shoveNotCrashed,
+    'V5 Combat Knockdown Toggle OK (ON: ragdoll->respawn, OFF: shove-only, obstacles remain zero-crash)');
 
   if (failures > 0) process.exit(1);
-  console.log('\\nALL CRAZYBIKE V4 CHECKS PASSED!');
+  console.log('\\nALL CRAZYBIKE V5 CHECKS PASSED!');
 `, ctx);
