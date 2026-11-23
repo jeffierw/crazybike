@@ -104,7 +104,8 @@ const Sky = (() => {
                 // Valley cloud sea hugging the pine foothills!
                 if (lyr == 1 && dir.y < 0.005 && dir.y > -0.06) {
                   let seaC: f32 = fbm3(vec2f(az * 6.0 + t * 0.02, dir.y * 28.0));
-                  let band: f32 = exp(-pow((dir.y + 0.018) / 0.022, 2.0)) * smoothstep(0.32, 0.72, seaC);
+                  let dd: f32 = (dir.y + 0.018) / 0.022;
+                  let band: f32 = exp(-(dd * dd)) * smoothstep(0.32, 0.72, seaC);
                   col = mix(col, mix(U.skyHor.rgb, U.sunCol.rgb * 1.1, 0.35), band * 0.65);
                 }
               }
@@ -122,13 +123,18 @@ const Sky = (() => {
               for (var lyr: i32 = 0; lyr < 3; lyr = lyr + 1) {
                 let fl: f32 = f32(lyr);
                 let fq: f32 = 2.4 + fl * 1.4;
+                var isL0: f32 = 0.0;
+                if (lyr == 0) { isL0 = 1.0; }
                 let r0: f32 = ridgeFbm(az * fq, 3.1 + fl * 5.3);
                 let r1: f32 = ridgeFbm((az + eps) * fq, 3.1 + fl * 5.3);
-                let h0: f32 = (0.015 - fl * 0.022) + (0.085 - fl * 0.015) * r0 + (lyr == 0 ? cone : 0.0);
-                let h1: f32 = (0.015 - fl * 0.022) + (0.085 - fl * 0.015) * r1 + (lyr == 0 ? cone : 0.0);
+                let h0: f32 = (0.015 - fl * 0.022) + (0.085 - fl * 0.015) * r0 + cone * isL0;
+                let h1: f32 = (0.015 - fl * 0.022) + (0.085 - fl * 0.015) * r1 + cone * isL0;
                 if (dir.y < h0) {
                   let slopeL: f32 = vistaSlopeShade((h1 - h0) / eps, dir);
-                  let lavaRim: f32 = lyr == 0 ? exp(-abs(az - 0.22) * 14.0) * smoothstep(h0 - 0.028, h0, dir.y) : 0.0;
+                  var lavaRim: f32 = 0.0;
+                  if (lyr == 0) {
+                    lavaRim = exp(-abs(az - 0.22) * 14.0) * smoothstep(h0 - 0.028, h0, dir.y);
+                  }
                   let bCol: vec3f = mix(vec3f(0.13, 0.09, 0.09) * (0.6 + 0.55 * slopeL), vec3f(2.4, 0.58, 0.08), lavaRim * 0.92);
                   let finalC: vec3f = mix(bCol, U.skyHor.rgb * 0.75, mix(0.42, 0.08, fl / 2.0));
                   col = mix(col, finalC, 1.0 - smoothstep(h0 - 0.005, h0, dir.y));
